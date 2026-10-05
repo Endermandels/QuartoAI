@@ -1,12 +1,14 @@
 from __future__ import annotations
 from global_defs.state import PieceMask, ActionGive, ActionPlace, WHITE_PIECES, BLACK_PIECES
+from global_defs.stats import Stats
 from model import Model
 from view import View
 from random import choice
 
 class Agent:
-    def __init__(self, is_p1: bool):
+    def __init__(self, is_p1: bool, stats: Stats):
         self.is_p1: bool = is_p1
+        self.stats: Stats = stats
 
     def query_give_piece(self, mdl: Model) -> ActionGive | None:
         return None
@@ -15,8 +17,8 @@ class Agent:
         return None
 
 class HumanAgent(Agent):
-    def __init__(self, is_p1: bool, vw: View):
-        super().__init__(is_p1)
+    def __init__(self, is_p1: bool, stats: Stats, vw: View):
+        super().__init__(is_p1, stats)
         self.vw: View = vw
     
     def query_give_piece(self, mdl: Model) -> ActionGive | None:
@@ -26,8 +28,8 @@ class HumanAgent(Agent):
         return self.vw.query_place_piece(mdl)
 
 class RandomAgent(Agent):
-    def __init__(self, is_p1: bool):
-        super().__init__(is_p1)
+    def __init__(self, is_p1: bool, stats: Stats):
+        super().__init__(is_p1, stats)
     
     def query_give_piece(self, mdl: Model) -> ActionGive | None:
         bit_mask_pieces: list[int]
