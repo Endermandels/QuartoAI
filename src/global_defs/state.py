@@ -2,7 +2,6 @@ from enum import IntEnum
 from typing import NamedTuple
 
 class PieceMask(IntEnum):
-    """ Mask for piece """
     EMPTY = 0x0000
     WHITE_TALL_SQUARE_HOLE = 0x0001
     WHITE_TALL_SQUARE_SOLID = 0x0002
@@ -55,11 +54,6 @@ class State(NamedTuple):
                             # 0xFFFF to start, P1 has white pieces, P2 has black pieces
     given_piece: int # The piece given to the opposite player of the player whose turn it is
 
-class ActionPlace(NamedTuple):
-    """ Describes where the given piece should be placed """
-    row: int
-    col: int
-
-class ActionGive(NamedTuple):
-    """ Describes which piece to give """
-    piece: int
+class Action(NamedTuple):
+    board_coords: tuple[int, int] = (-1, -1)
+    piece: int = PieceMask.EMPTY.value

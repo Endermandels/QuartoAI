@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import ActionGive, ActionPlace, PieceMask, Winner
+from global_defs.state import Action, PieceMask, Winner
 from global_defs.stats import Stats
 from model import Model
 
@@ -25,11 +25,11 @@ class View:
     def __init__(self):
         self.quit_input: bool = False # Input to quit the game
     
-    def query_give_piece(self, mdl: Model) -> ActionGive | None:
+    def query_give_piece(self, mdl: Model) -> Action | None:
         """ Returns the piece to give to the other player, or None on a different input (i.e. quit) """
         return None
     
-    def query_place_piece(self, mdl: Model) -> ActionPlace | None:
+    def query_place_piece(self, mdl: Model) -> Action | None:
         """ Returns the coords to place the given piece, or None on a different input (i.e. quit) """
         return None
     
@@ -47,8 +47,8 @@ class TerminalView(View):
         super().__init__()
         self._print("$$$ Quarto AI $$$", BColors.GREEN, True)
         
-    def query_give_piece(self, mdl: Model) -> ActionGive | None:
-        action: ActionGive = None
+    def query_give_piece(self, mdl: Model) -> Action | None:
+        action: Action = None
         inp: str = ""
 
         self._print(f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} which piece would you like to give", BColors.CYAN)        
@@ -89,14 +89,14 @@ class TerminalView(View):
                 valid_piece = False
             
             if valid_piece:  
-                action = ActionGive(PieceMask[piece_name])
+                action = Action(piece=PieceMask[piece_name].value)
         else:
             self._warn(f"! Unknown input: {inp}")
             
         return action
         
-    def query_place_piece(self, mdl: Model) -> ActionPlace | None:
-        action: ActionPlace = None
+    def query_place_piece(self, mdl: Model) -> Action | None:
+        action: Action = None
         inp: str = ""
         inp_split: list[str] = []
 
@@ -110,7 +110,7 @@ class TerminalView(View):
         elif inp in ["p", "print"]:
             self._print_board(mdl.state.board)
         elif len(inp_split) == 2 and all([s.isdigit() for s in inp_split]):
-            action = ActionPlace(int(inp_split[0]), int(inp_split[1]))
+            action = Action(board_coords=(int(inp_split[0]), int(inp_split[1])))
         else:
             self._warn(f"! Unknown input: {inp}")
         

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import PieceMask, ActionGive, ActionPlace, State, Winner, WHITE_PIECES, BLACK_PIECES
+from global_defs.state import PieceMask, Action, State, Winner, WHITE_PIECES, BLACK_PIECES
 from enum import StrEnum
 
 class Errors(StrEnum):
@@ -44,7 +44,7 @@ class Model:
         
         return res
     
-    def is_legal_give_piece(self, action: ActionGive) -> bool:
+    def is_legal_give_piece(self, action: Action) -> bool:
         is_legal: bool = False
         pieces: int = self.state.remaining_pieces
         
@@ -60,7 +60,7 @@ class Model:
         
         return is_legal
     
-    def is_legal_place_piece(self, action: ActionPlace) -> bool:
+    def is_legal_place_piece(self, action: Action) -> bool:
         is_legal: bool = False
         
         if action == None:
@@ -68,13 +68,13 @@ class Model:
         
         # Check that the specified coordinates are within the board
         if (
-            0 <= action.row and action.row < len(self.state.board)
-            and 0 <= action.col and action.col < len(self.state.board[0])
+            0 <= action.board_coords[0] and action.board_coords[0] < len(self.state.board)
+            and 0 <= action.board_coords[1] and action.board_coords[1] < len(self.state.board[0])
         ):
             is_legal = True
             
             # Check that the board space specified is EMPTY
-            if self.state.board[action.row][action.col] != PieceMask.EMPTY:
+            if self.state.board[action.board_coords[0]][action.board_coords[1]] != PieceMask.EMPTY:
                 is_legal = False
                 self.error_log.append(Errors.BOARD_SPACE_OCCUPIED)
         else:
@@ -82,7 +82,7 @@ class Model:
         
         return is_legal
     
-    def give_piece(self, action: ActionGive) -> State:
+    def give_piece(self, action: Action) -> State:
         """ Give the specified piece to the opposite player """
         new_remaining_pieces: int = self.state.remaining_pieces
         given_piece: int = PieceMask.EMPTY
@@ -102,26 +102,28 @@ class Model:
         
         return self.state
     
-    def place_piece(self, action: ActionPlace) -> State:
+    def place_piece(self, action: Action) -> State:
         """ Opposite player places the given piece """
         new_board: tuple[tuple[int, ...], ...]
         new_row: tuple[int, ...]
+        action_row: int = action.board_coords[0]
+        action_col: int = action.board_coords[1]
         
         if not self.is_legal_place_piece(action):
             return self.state
         
         new_row = (
-            self.state.board[action.row][:action.col] 
+            self.state.board[action_row][:action_col] 
             + (self.state.given_piece, ) 
-            + self.state.board[action.row][action.col + 1:]
+            + self.state.board[action_row][action_col + 1:]
         )
         new_board = (
-            self.state.board[:action.row] 
+            self.state.board[:action_row] 
             + (new_row, ) 
-            + self.state.board[action.row + 1:]
+            + self.state.board[action_row + 1:]
         )
         self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
-                             f"placed {PieceMask(self.state.given_piece).name} at ({action.row}, {action.col})")
+                             f"placed {PieceMask(self.state.given_piece).name} at ({action_row}, {action_col})")
         
         self.state = State(
             new_board,
