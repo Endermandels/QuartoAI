@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import ActionGive, ActionPlace, PieceMask, BoardSpace, Winner
+from global_defs.state import ActionGive, ActionPlace, PieceMask, Winner
 from model import Model
 
 class BColors:
@@ -47,7 +47,7 @@ class TerminalView(View):
         action: ActionGive = None
         inp: str = ""
 
-        self.print(f"? {"P1" if mdl.state.is_p1_turn else "P2"} which piece would you like to give")        
+        self.print(f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} which piece would you like to give")        
         inp = input("> ").strip().lower()
         
         if inp in ["q", "quit"]:
@@ -55,42 +55,37 @@ class TerminalView(View):
         elif inp in ["p", "print"]:
             self._print_board(mdl.state.board)
         elif len(inp) == 3:
+            piece_name: str = ""
+            valid_piece: bool = True
+            
+            piece_name += "WHITE_" if mdl.is_p1_turn(mdl.state) else "BLACK_"
+
             if inp[0] == "s":
-                if inp[1] == "s":
-                    if inp[2] == "h":
-                        action = ActionGive(PieceMask.SHORT_SQUARE_HOLE)
-                    elif inp[2] == "s":
-                        action = ActionGive(PieceMask.SHORT_SQUARE_SOLID)
-                    else:
-                        self.warn(f"! Unknown hole/solid input: {inp[2]}")
-                elif inp[1] == "c":
-                    if inp[2] == "h":
-                        action = ActionGive(PieceMask.SHORT_CIRCLE_HOLE)
-                    elif inp[2] == "s":
-                        action = ActionGive(PieceMask.SHORT_CIRCLE_SOLID)
-                    else:
-                        self.warn(f"! Unknown hole/solid input: {inp[2]}")
-                else:
-                    self.warn(f"! Unknown square/circle input: {inp[1]}")
+                piece_name += "SHORT_"
             elif inp[0] == "t":
-                if inp[1] == "s":
-                    if inp[2] == "h":
-                        action = ActionGive(PieceMask.TALL_SQUARE_HOLE)
-                    elif inp[2] == "s":
-                        action = ActionGive(PieceMask.TALL_SQUARE_SOLID)
-                    else:
-                        self.warn(f"! Unknown hole/solid input: {inp[2]}")
-                elif inp[1] == "c":
-                    if inp[2] == "h":
-                        action = ActionGive(PieceMask.TALL_CIRCLE_HOLE)
-                    elif inp[2] == "s":
-                        action = ActionGive(PieceMask.TALL_CIRCLE_SOLID)
-                    else:
-                        self.warn(f"! Unknown hole/solid input: {inp[2]}")
-                else:
-                    self.warn(f"! Unknown square/circle input: {inp[1]}")
+                piece_name += "TALL_"
             else:
                 self.warn(f"! Unknown tall/short input: {inp[0]}")
+                valid_piece = False
+            
+            if inp[1] == "s":
+                piece_name += "SQUARE_"
+            elif inp[1] == "c":
+                piece_name += "CIRCLE_"
+            else:
+                self.warn(f"! Unknown square/circle input: {inp[0]}")
+                valid_piece = False
+            
+            if inp[2] == "h":
+                piece_name += "HOLE"
+            elif inp[2] == "s":
+                piece_name += "SOLID"
+            else:
+                self.warn(f"! Unknown hole/solid input: {inp[0]}")
+                valid_piece = False
+            
+            if valid_piece:  
+                action = ActionGive(PieceMask[piece_name])
         else:
             self.warn(f"! Unknown input: {inp}")
             
@@ -101,7 +96,7 @@ class TerminalView(View):
         inp: str = ""
         inp_split: list[str] = []
 
-        self.print(f"? {"P2" if mdl.state.is_p1_turn else "P1"} where would you like to place the {mdl.state.given_piece.name}")        
+        self.print(f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} where would you like to place the {mdl.state.given_piece.name}")        
         inp = input("> ").strip().lower()
         inp_split = inp.split(",")
         
@@ -117,10 +112,11 @@ class TerminalView(View):
         return action
     
     def display_winner(self, mdl: Model) -> None:
-        if mdl.state.winner == Winner.TIE:
+        winner: Winner = mdl.check_winner(mdl.state)
+        if winner == Winner.TIE:
             self.print(f"* Tie!", BColors.YELLOW, True)
         else:
-            self.print(f"* {mdl.state.winner.name} Won!", BColors.GREEN, True)
+            self.print(f"* {winner.name} Won!", BColors.GREEN, True)
         self._print_board(mdl.state.board)
     
     def update(self, mdl: Model) -> None:
@@ -145,6 +141,6 @@ class TerminalView(View):
             print("| ", end="")
             for piece in row:
                 # Represent each piece by the first letter of each category (i.e. BTSH for BLACK_TALL_SQUARE_HOLE)
-                piece_repr: str = "".join([s[0] for s in BoardSpace(piece).name.split("_")])
+                piece_repr: str = "".join([s[0] for s in PieceMask(piece).name.split("_")])
                 print(f"{piece_repr}\t| ", end="")
             print()

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import BoardSpace, Winner
+from global_defs.state import PieceMask, Winner
 from model import Model
 from view import View
 from agent import Agent
@@ -13,20 +13,20 @@ class Controller:
         self.p2: Agent = p2
 
     def update(self) -> None:
-        if self.mdl.state.winner != Winner.NONE:
+        if self.mdl.check_winner(self.mdl.state) != Winner.NONE:
             self.vw.display_winner(self.mdl)
             self.running = False
             return
-        elif self.mdl.state.given_piece == BoardSpace.EMPTY:
-            if self.mdl.state.is_p1_turn:
+        elif self.mdl.state.given_piece == PieceMask.EMPTY:
+            if self.mdl.is_p1_turn(self.mdl.state):
                 self.mdl.give_piece(self.p1.query_give_piece(self.mdl))
             else:
                 self.mdl.give_piece(self.p2.query_give_piece(self.mdl))
-        elif self.mdl.state.given_piece != BoardSpace.EMPTY:
-            if self.mdl.state.is_p1_turn:
-                self.mdl.place_piece(self.p2.query_place_piece(self.mdl))
-            else:
+        elif self.mdl.state.given_piece != PieceMask.EMPTY:
+            if self.mdl.is_p1_turn(self.mdl.state):
                 self.mdl.place_piece(self.p1.query_place_piece(self.mdl))
+            else:
+                self.mdl.place_piece(self.p2.query_place_piece(self.mdl))
             
         self.vw.update(self.mdl)
         

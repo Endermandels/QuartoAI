@@ -1,38 +1,47 @@
 from enum import IntEnum
 from typing import NamedTuple
 
-PIECES_FULL = 0xFF # All pieces available
-
 class PieceMask(IntEnum):
-    """ Mask for piece available for player to hand over """
-    TALL_SQUARE_HOLE = 0x01
-    TALL_SQUARE_SOLID = 0x02
-    TALL_CIRCLE_HOLE = 0x04
-    TALL_CIRCLE_SOLID = 0x08
-    SHORT_SQUARE_HOLE = 0x10
-    SHORT_SQUARE_SOLID = 0x20
-    SHORT_CIRCLE_HOLE = 0x40
-    SHORT_CIRCLE_SOLID = 0x80
+    """ Mask for piece """
+    EMPTY = 0x0000
+    WHITE_TALL_SQUARE_HOLE = 0x0001
+    WHITE_TALL_SQUARE_SOLID = 0x0002
+    WHITE_TALL_CIRCLE_HOLE = 0x0004
+    WHITE_TALL_CIRCLE_SOLID = 0x0008
+    WHITE_SHORT_SQUARE_HOLE = 0x0010
+    WHITE_SHORT_SQUARE_SOLID = 0x0020
+    WHITE_SHORT_CIRCLE_HOLE = 0x0040
+    WHITE_SHORT_CIRCLE_SOLID = 0x0080
+    BLACK_TALL_SQUARE_HOLE = 0x0100
+    BLACK_TALL_SQUARE_SOLID = 0x0200
+    BLACK_TALL_CIRCLE_HOLE = 0x0400
+    BLACK_TALL_CIRCLE_SOLID = 0x0800
+    BLACK_SHORT_SQUARE_HOLE = 0x1000
+    BLACK_SHORT_SQUARE_SOLID = 0x2000
+    BLACK_SHORT_CIRCLE_HOLE = 0x4000
+    BLACK_SHORT_CIRCLE_SOLID = 0x8000
 
-class BoardSpace(IntEnum):
-    """ Board space contents """
-    WHITE_TALL_SQUARE_HOLE = 0
-    WHITE_TALL_SQUARE_SOLID = 1
-    WHITE_TALL_CIRCLE_HOLE = 2
-    WHITE_TALL_CIRCLE_SOLID = 3
-    WHITE_SHORT_SQUARE_HOLE = 4
-    WHITE_SHORT_SQUARE_SOLID = 5
-    WHITE_SHORT_CIRCLE_HOLE = 6
-    WHITE_SHORT_CIRCLE_SOLID = 7
-    BLACK_TALL_SQUARE_HOLE = 8
-    BLACK_TALL_SQUARE_SOLID = 9
-    BLACK_TALL_CIRCLE_HOLE = 10
-    BLACK_TALL_CIRCLE_SOLID = 11
-    BLACK_SHORT_SQUARE_HOLE = 12
-    BLACK_SHORT_SQUARE_SOLID = 13
-    BLACK_SHORT_CIRCLE_HOLE = 14
-    BLACK_SHORT_CIRCLE_SOLID = 15
-    EMPTY = 16
+WHITE_PIECES: int = (
+    PieceMask.WHITE_TALL_CIRCLE_HOLE 
+    | PieceMask.WHITE_SHORT_CIRCLE_HOLE
+    | PieceMask.WHITE_SHORT_CIRCLE_SOLID
+    | PieceMask.WHITE_SHORT_SQUARE_HOLE
+    | PieceMask.WHITE_SHORT_SQUARE_SOLID
+    | PieceMask.WHITE_TALL_CIRCLE_SOLID
+    | PieceMask.WHITE_TALL_SQUARE_HOLE
+    | PieceMask.WHITE_TALL_SQUARE_SOLID
+)
+
+BLACK_PIECES: int = (
+    PieceMask.BLACK_TALL_CIRCLE_HOLE 
+    | PieceMask.BLACK_SHORT_CIRCLE_HOLE
+    | PieceMask.BLACK_SHORT_CIRCLE_SOLID
+    | PieceMask.BLACK_SHORT_SQUARE_HOLE
+    | PieceMask.BLACK_SHORT_SQUARE_SOLID
+    | PieceMask.BLACK_TALL_CIRCLE_SOLID
+    | PieceMask.BLACK_TALL_SQUARE_HOLE
+    | PieceMask.BLACK_TALL_SQUARE_SOLID
+)
 
 class Winner(IntEnum):
     NONE = 0
@@ -42,11 +51,9 @@ class Winner(IntEnum):
 
 class State(NamedTuple):
     board: tuple[tuple[int, ...], ...]
-    p1_pieces: int # Each bit represents having a piece (1) or not having a piece (0)
-    p2_pieces: int # 0xFF to start, P1 has white pieces, P2 has black pieces
+    remaining_pieces: int   # Each bit represents having a piece (1) or not having a piece (0)
+                            # 0xFFFF to start, P1 has white pieces, P2 has black pieces
     given_piece: int # The piece given to the opposite player of the player whose turn it is
-    is_p1_turn: bool
-    winner: int
 
 class ActionPlace(NamedTuple):
     """ Describes where the given piece should be placed """

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import BoardSpace, PieceMask, ActionGive, ActionPlace, State, Winner, PIECES_FULL
+from global_defs.state import PieceMask, ActionGive, ActionPlace, State, Winner, WHITE_PIECES, BLACK_PIECES
 from enum import StrEnum
 
 class Errors(StrEnum):
@@ -16,28 +16,43 @@ class Model:
         if self.state == None:
             self.state = State(
                 (
-                    (BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY),
-                    (BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY),
-                    (BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY),
-                    (BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY, BoardSpace.EMPTY),
+                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
+                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
+                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
+                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
                 ),
-                PIECES_FULL,
-                PIECES_FULL,
-                BoardSpace.EMPTY,
-                True,
-                Winner.NONE
+                WHITE_PIECES | BLACK_PIECES,
+                PieceMask.EMPTY,
             )
+    
+    def is_p1_turn(self, state: State) -> bool:
+        """ Returns whether the current action should be done by P1 (true) or P2 (false) """
+        res: bool = False
+        
+        if state.given_piece == PieceMask.EMPTY:
+            # If p1 pieces left == p2 pieces left and no piece has been given, it is p1's turn to give
+            if state.remaining_pieces.bit_count() % 2 == 0:
+                res = True
+            # If p1 pieces left != p2 pieces left and no piece has been given, it is p2's turn to give
+             
+        # If a black piece has been given, it is p1's turn to place 
+        elif (state.given_piece & BLACK_PIECES) != 0:
+            res = True
+            
+        # If a white piece has been given, it is p2's turn to place
+        
+        return res
     
     def is_legal_give_piece(self, action: ActionGive) -> bool:
         is_legal: bool = False
-        mask: int
+        pieces: int = self.state.remaining_pieces
         
         if action == None:
             return is_legal
         
         # Check that current player has the desired piece available to give
-        mask = self.state.p1_pieces if self.state.is_p1_turn else self.state.p2_pieces
-        if (action.piece & mask) == action.piece:
+        pieces = (pieces & WHITE_PIECES) if self.is_p1_turn(self.state) else (pieces & BLACK_PIECES)
+        if (action.piece & pieces) == action.piece:
             is_legal = True
         else:
             self.error_log.append(Errors.NO_PIECE_TO_GIVE)
@@ -58,7 +73,7 @@ class Model:
             is_legal = True
             
             # Check that the board space specified is EMPTY
-            if not self.state.board[action.row][action.col] == BoardSpace.EMPTY:
+            if self.state.board[action.row][action.col] != PieceMask.EMPTY:
                 is_legal = False
                 self.error_log.append(Errors.BOARD_SPACE_OCCUPIED)
         else:
@@ -68,63 +83,19 @@ class Model:
     
     def give_piece(self, action: ActionGive) -> State:
         """ Give the specified piece to the opposite player """
-        new_p1_pieces: int = self.state.p1_pieces
-        new_p2_pieces: int = self.state.p2_pieces
-        given_piece: int = BoardSpace.EMPTY
+        new_remaining_pieces: int = self.state.remaining_pieces
+        given_piece: int = PieceMask.EMPTY
         
         if not self.is_legal_give_piece(action):
             return self.state
 
-        if self.state.is_p1_turn:
-            # Remove piece from p1_pieces
-            new_p1_pieces = self.state.p1_pieces & (~action.piece)
-            
-            # Assign correct white piece to given_piece
-            if action.piece == PieceMask.SHORT_CIRCLE_HOLE:
-                given_piece = BoardSpace.WHITE_SHORT_CIRCLE_HOLE
-            elif action.piece == PieceMask.SHORT_CIRCLE_SOLID:
-                given_piece = BoardSpace.WHITE_SHORT_CIRCLE_SOLID
-            elif action.piece == PieceMask.SHORT_SQUARE_HOLE:
-                given_piece = BoardSpace.WHITE_SHORT_SQUARE_HOLE
-            elif action.piece == PieceMask.SHORT_SQUARE_SOLID:
-                given_piece = BoardSpace.WHITE_SHORT_SQUARE_SOLID
-            elif action.piece == PieceMask.TALL_CIRCLE_HOLE:
-                given_piece = BoardSpace.WHITE_TALL_CIRCLE_HOLE
-            elif action.piece == PieceMask.TALL_CIRCLE_SOLID:
-                given_piece = BoardSpace.WHITE_TALL_CIRCLE_SOLID
-            elif action.piece == PieceMask.TALL_SQUARE_HOLE:
-                given_piece = BoardSpace.WHITE_TALL_SQUARE_HOLE
-            elif action.piece == PieceMask.TALL_SQUARE_SOLID:
-                given_piece = BoardSpace.WHITE_TALL_SQUARE_SOLID
-        else:
-            # Remove piece from p2_pieces
-            new_p2_pieces = self.state.p2_pieces & (~action.piece)
-            
-            # Assign correct black piece to given_piece
-            if action.piece == PieceMask.SHORT_CIRCLE_HOLE:
-                given_piece = BoardSpace.BLACK_SHORT_CIRCLE_HOLE
-            elif action.piece == PieceMask.SHORT_CIRCLE_SOLID:
-                given_piece = BoardSpace.BLACK_SHORT_CIRCLE_SOLID
-            elif action.piece == PieceMask.SHORT_SQUARE_HOLE:
-                given_piece = BoardSpace.BLACK_SHORT_SQUARE_HOLE
-            elif action.piece == PieceMask.SHORT_SQUARE_SOLID:
-                given_piece = BoardSpace.BLACK_SHORT_SQUARE_SOLID
-            elif action.piece == PieceMask.TALL_CIRCLE_HOLE:
-                given_piece = BoardSpace.BLACK_TALL_CIRCLE_HOLE
-            elif action.piece == PieceMask.TALL_CIRCLE_SOLID:
-                given_piece = BoardSpace.BLACK_TALL_CIRCLE_SOLID
-            elif action.piece == PieceMask.TALL_SQUARE_HOLE:
-                given_piece = BoardSpace.BLACK_TALL_SQUARE_HOLE
-            elif action.piece == PieceMask.TALL_SQUARE_SOLID:
-                given_piece = BoardSpace.BLACK_TALL_SQUARE_SOLID
+        new_remaining_pieces = self.state.remaining_pieces & (~action.piece)
+        given_piece = action.piece
         
         self.state = State(
             self.state.board,
-            new_p1_pieces,
-            new_p2_pieces,
+            new_remaining_pieces,
             given_piece,
-            self.state.is_p1_turn,
-            self.state.winner
         )
         
         return self.state
@@ -133,7 +104,6 @@ class Model:
         """ Opposite player places the given piece """
         new_board: tuple[tuple[int, ...], ...]
         new_row: tuple[int, ...]
-        new_winner: Winner
         
         if not self.is_legal_place_piece(action):
             return self.state
@@ -149,37 +119,31 @@ class Model:
             + self.state.board[action.row + 1:]
         )
         
-        # Check for winner/tie (important to call before changing self.state.is_p1_turn)
-        new_winner = self._check_winner(new_board)
-        
         self.state = State(
             new_board,
-            self.state.p1_pieces,
-            self.state.p2_pieces,
-            BoardSpace.EMPTY, # Reset given_piece
-            not self.state.is_p1_turn, # Switch turns
-            new_winner
+            self.state.remaining_pieces,
+            PieceMask.EMPTY, # Reset given_piece
         )
         
         return self.state
     
-    def _check_winner(self, board: tuple[tuple[int, ...], ...]) -> Winner:
+    def check_winner(self, state: State) -> Winner:
         new_winner: Winner = Winner.NONE
         at_least_one_empty: bool = False # Keeps track of whether there is at least one EMPTY space left
         
-        for j in range(len(board)):
+        for j in range(len(state.board)):
             category_counts: dict = {} # key = category (i.e. "WH" for white), value = count
             
             # Check rows, columns and diagonals
             # Count each category
             # If at least one category has a count of the length of the board, the winner is the opposite player
-            for i in range(len(board[j])):
-                row_categories: list[str] = [s[0:2] for s in BoardSpace(board[j][i]).name.split("_")]
-                col_categories: list[str] = [s[0:2] for s in BoardSpace(board[i][j]).name.split("_")]
-                dia_categories: list[str] = [BoardSpace.EMPTY.name[0:2]]
+            for i in range(len(state.board[j])):
+                row_categories: list[str] = [s[0:2] for s in PieceMask(state.board[j][i]).name.split("_")]
+                col_categories: list[str] = [s[0:2] for s in PieceMask(state.board[i][j]).name.split("_")]
+                dia_categories: list[str] = [PieceMask.EMPTY.name[0:2]]
                 if j == 0:
-                    dia_categories = [s[0:2] for s in BoardSpace(board[j + i][j + i]).name.split("_")]
-                    dia_categories = [s[0:2] for s in BoardSpace(board[j + i][len(board) - 1 - i]).name.split("_")]
+                    dia_categories = [s[0:2] for s in PieceMask(state.board[j + i][j + i]).name.split("_")]
+                    dia_categories = [s[0:2] for s in PieceMask(state.board[j + i][len(state.board) - 1 - i]).name.split("_")]
 
                 for cat in row_categories:
                     if cat != "EM": # Filter out EMPTY board spaces
@@ -208,11 +172,12 @@ class Model:
                             category_counts[dcat] = 1
             
             for value in category_counts.values():
-                if value == len(board):
-                    if self.state.is_p1_turn:
-                        new_winner = Winner.PLAYER_2
-                    else:
+                if value == len(state.board):
+                    # The last person who placed a piece then goes to give a piece
+                    if self.is_p1_turn(state):
                         new_winner = Winner.PLAYER_1
+                    else:
+                        new_winner = Winner.PLAYER_2
                     break
             
             if new_winner != Winner.NONE:
