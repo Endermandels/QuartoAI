@@ -62,4 +62,4 @@ class ActionPlace(NamedTuple):
 
 class ActionGive(NamedTuple):
     """ Describes which piece to give """
-    piece: PieceMask
+    piece: int

@@ -11,6 +11,7 @@ class Model:
     def __init__(self, start_state: State = None):
         self.state: State = start_state
         self.error_log: list[Errors] = []
+        self.move_log: list[str] = []
         
         # Default State
         if self.state == None:
@@ -88,9 +89,10 @@ class Model:
         
         if not self.is_legal_give_piece(action):
             return self.state
-
+        
         new_remaining_pieces = self.state.remaining_pieces & (~action.piece)
         given_piece = action.piece
+        self.move_log.append(f"{"P1 gave P2" if self.is_p1_turn(self.state) else "P2 gave P1"} a {PieceMask(given_piece).name}")
         
         self.state = State(
             self.state.board,
@@ -118,6 +120,8 @@ class Model:
             + (new_row, ) 
             + self.state.board[action.row + 1:]
         )
+        self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
+                             f"placed {PieceMask(self.state.given_piece).name} at ({action.row}, {action.col})")
         
         self.state = State(
             new_board,

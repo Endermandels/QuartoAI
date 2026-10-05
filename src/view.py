@@ -47,7 +47,7 @@ class TerminalView(View):
         action: ActionGive = None
         inp: str = ""
 
-        self.print(f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} which piece would you like to give")        
+        self.print(f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} which piece would you like to give", BColors.CYAN)        
         inp = input("> ").strip().lower()
         
         if inp in ["q", "quit"]:
@@ -96,7 +96,8 @@ class TerminalView(View):
         inp: str = ""
         inp_split: list[str] = []
 
-        self.print(f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} where would you like to place the {mdl.state.given_piece.name}")        
+        self.print( f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} " \
+                    f"where would you like to place the {PieceMask(mdl.state.given_piece).name}", BColors.CYAN)
         inp = input("> ").strip().lower()
         inp_split = inp.split(",")
         
@@ -122,6 +123,8 @@ class TerminalView(View):
     def update(self, mdl: Model) -> None:
         while len(mdl.error_log) > 0:
             self.warn(f"! Error: {mdl.error_log.pop(0)}")
+        while len(mdl.move_log) > 0:
+            self.print(f"* {mdl.move_log.pop(0)}")
 
     def print(self, string: str, col: BColors = BColors.ENDC, bold: bool = False) -> None:
         """ Print string with specified color """
