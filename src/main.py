@@ -2,20 +2,26 @@ from global_defs.stats import Stats
 from controller import Controller
 from view import View, TerminalView
 from model import Model
-from agent import HumanAgent, RandomAgent
+from agent import HeuristicAgent, RandomAgent, HumanAgent, Agent
+from time import perf_counter
 
 RUNS: int = 50
 
 def train(runs) -> None:
-    vw = View()
-    vwt = TerminalView()
-    p1 = RandomAgent(True, Stats("Random 1"))
-    p2 = RandomAgent(False, Stats("Random 2"))
+    vw: View = View()
+    vwt: View = TerminalView()
+    p1: Agent = RandomAgent(True, Stats("Random 1"))
+    p2: Agent = HeuristicAgent(False, Stats("Heuristic 2"))
+    start_time: float = perf_counter()
+    end_time: float
     
     for i in range(runs):
         mdl = Model()
         ctrl = Controller(mdl, vw, p1, p2)
         ctrl.run()
+        
+    end_time = perf_counter()
+    print(f"Runtime: {(end_time - start_time):.6f} seconds")
     
     vwt.display_stats(p1.stats)
     vwt.display_stats(p2.stats)

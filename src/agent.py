@@ -1,6 +1,7 @@
 from __future__ import annotations
-from global_defs.state import State, PieceMask, Action, WHITE_PIECES, BLACK_PIECES
+from global_defs.state import State, Winner, Action
 from global_defs.stats import Stats
+from collections import defaultdict
 from model import Model
 from view import View
 from random import choice
@@ -32,23 +33,62 @@ class RandomAgent(Agent):
         super().__init__(is_p1, stats)
     
     def query_give_piece(self, mdl: Model) -> Action | None:
-        bit_mask_pieces: list[int]
-        agent_pieces: int = WHITE_PIECES if self.is_p1 else BLACK_PIECES
-        agent_pieces &= mdl.state.remaining_pieces
-        
-        bit_mask_pieces = [1 << i for i in range(agent_pieces.bit_length()) if ((agent_pieces >> i) & 1) == 1]
-        
-        return Action(piece=choice(bit_mask_pieces))
+        return Action(piece=choice(mdl.legal_actions(mdl.state)).piece)
 
     def query_place_piece(self, mdl: Model) -> Action | None:
-        available_coords: list[tuple[int, int]] = []
+        return Action(board_coords=choice(mdl.legal_actions(mdl.state)).board_coords)
+
+class HeuristicAgent(Agent):
+    def __init__(self, is_p1: bool, stats: Stats):
+        super().__init__(is_p1, stats)
+    
+    def query_give_piece(self, mdl: Model) -> Action | None:
+        # Never give a winning piece, if possible
         
-        for r in range(len(mdl.state.board)):
-            for c, piece in enumerate(mdl.state.board[r]):
-                if piece == PieceMask.EMPTY:
-                    available_coords.append((r, c))
-  
-        return Action(board_coords=choice(available_coords))
+        # For each piece left,
+        #  check if any spot on the board having that piece will result in a win for the opponent
+        #  if there are any spots, don't give that piece
+        # If after searching no pieces are left that won't result in defeat, choose a random piece
+        
+        legal_pieces: list[int] = [a.piece for a in mdl.legal_actions(mdl.state)]
+        good_pieces: list[int] = []
+        
+        for piece in legal_pieces:
+            temp_state: State = mdl.give_piece(mdl.state, Action(piece=piece), update_state=False)
+            bad_piece: bool = False
+            for r in range(len(mdl.state.board)):
+                for c in range(len(mdl.state.board[r])):
+                    winner: Winner = mdl.check_winner(mdl.place_piece(temp_state, Action(board_coords=(r, c)), update_state=False))
+                    if ((winner == Winner.PLAYER_2 and self.is_p1) 
+                        or (winner == Winner.PLAYER_1 and not self.is_p1)):
+                        bad_piece = True
+                        break
+                if bad_piece:
+                    break
+            if not bad_piece:
+                good_pieces.append(piece)
+        
+        return Action(piece=choice(good_pieces if len(good_pieces) > 0 else legal_pieces)) 
+
+    def query_place_piece(self, mdl: Model) -> Action | None:
+        # Always place piece in a winning spot, if possible
+        
+        # For each place,
+        #  check if placing the piece results in a win
+        #  if there are any spots, place it there
+        # Otherwise, place it randomly
+        legal_spaces: list[tuple[int, int]] = [a.board_coords for a in mdl.legal_actions(mdl.state)]
+        winning_space: tuple[int, int] = None
+        
+        for space in legal_spaces:
+            winner: Winner = mdl.check_winner(mdl.place_piece(mdl.state, Action(board_coords=space), False))
+            
+            if ((winner == Winner.PLAYER_1 and self.is_p1) 
+                or (winner == Winner.PLAYER_2 and not self.is_p1)):
+                winning_space = space
+                break
+        
+        return Action(board_coords=(winning_space if winning_space != None else choice(legal_spaces)))
 
 class QLearnAgent(Agent):
     # store q values: {(state, action): -> q}
@@ -66,8 +106,9 @@ class QLearnAgent(Agent):
         self.alpha = alpha
         self.gamma = gamma
         
-        self.q_table = {}
+        self.q_table = defaultdict(float) # default q of 0; populate q as agent encounters state, action pairs
     
-    def _init_q_table(self) -> dict[State]:
+    def _update_q_table(self, state: State, action: Action) -> None:
+        """ Update q table based on observation of what state the given action produced """
         pass
     

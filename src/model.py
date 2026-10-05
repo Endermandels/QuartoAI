@@ -44,15 +44,15 @@ class Model:
         
         return res
     
-    def is_legal_give_piece(self, action: Action) -> bool:
+    def is_legal_give_piece(self, state: State, action: Action) -> bool:
         is_legal: bool = False
-        pieces: int = self.state.remaining_pieces
+        pieces: int = state.remaining_pieces
         
         if action == None:
             return is_legal
         
         # Check that current player has the desired piece available to give
-        pieces = (pieces & WHITE_PIECES) if self.is_p1_turn(self.state) else (pieces & BLACK_PIECES)
+        pieces = (pieces & WHITE_PIECES) if self.is_p1_turn(state) else (pieces & BLACK_PIECES)
         if (action.piece & pieces) == action.piece:
             is_legal = True
         else:
@@ -60,7 +60,7 @@ class Model:
         
         return is_legal
     
-    def is_legal_place_piece(self, action: Action) -> bool:
+    def is_legal_place_piece(self, state: State, action: Action) -> bool:
         is_legal: bool = False
         
         if action == None:
@@ -68,13 +68,13 @@ class Model:
         
         # Check that the specified coordinates are within the board
         if (
-            0 <= action.board_coords[0] and action.board_coords[0] < len(self.state.board)
-            and 0 <= action.board_coords[1] and action.board_coords[1] < len(self.state.board[0])
+            0 <= action.board_coords[0] and action.board_coords[0] < len(state.board)
+            and 0 <= action.board_coords[1] and action.board_coords[1] < len(state.board[0])
         ):
             is_legal = True
             
             # Check that the board space specified is EMPTY
-            if self.state.board[action.board_coords[0]][action.board_coords[1]] != PieceMask.EMPTY:
+            if state.board[action.board_coords[0]][action.board_coords[1]] != PieceMask.EMPTY:
                 is_legal = False
                 self.error_log.append(Errors.BOARD_SPACE_OCCUPIED)
         else:
@@ -82,56 +82,87 @@ class Model:
         
         return is_legal
     
-    def give_piece(self, action: Action) -> State:
+    def legal_actions(self, state: State) -> list[Action]:
+        """ Returns a list of legal actions for the given state """
+        actions: list[Action] = []
+        
+        if state.given_piece == PieceMask.EMPTY:
+            # Give piece actions
+            
+            for i in range((WHITE_PIECES | BLACK_PIECES).bit_length()):
+                action: Action = Action(piece=1 << i)
+                if self.is_legal_give_piece(state, action):
+                    actions.append(action)
+        else:
+            # Place piece actions
+            
+            for r in range(len(state.board)):
+                for c in range(len(state.board[r])):
+                    action: Action = Action(board_coords=(r, c))
+                    if self.is_legal_place_piece(state, action):
+                        actions.append(action)
+                        
+        return actions
+    
+    def give_piece(self, state: State, action: Action, update_state: bool = True) -> State:
         """ Give the specified piece to the opposite player """
-        new_remaining_pieces: int = self.state.remaining_pieces
+        new_remaining_pieces: int = state.remaining_pieces
         given_piece: int = PieceMask.EMPTY
+        new_state: State
         
-        if not self.is_legal_give_piece(action):
-            return self.state
+        if not self.is_legal_give_piece(state, action):
+            return state
         
-        new_remaining_pieces = self.state.remaining_pieces & (~action.piece)
+        new_remaining_pieces = state.remaining_pieces & (~action.piece)
         given_piece = action.piece
-        self.move_log.append(f"{"P1 gave P2" if self.is_p1_turn(self.state) else "P2 gave P1"} a {PieceMask(given_piece).name}")
-        
-        self.state = State(
-            self.state.board,
+        new_state = State(
+            state.board,
             new_remaining_pieces,
             given_piece,
         )
         
-        return self.state
+        if update_state:
+            self.move_log.append(f"{"P1 gave P2" if self.is_p1_turn(self.state) else "P2 gave P1"} a {PieceMask(given_piece).name}")
+            self.state = new_state
+        
+        return new_state
     
-    def place_piece(self, action: Action) -> State:
+    def place_piece(self, state: State, action: Action, update_state: bool = True) -> State:
         """ Opposite player places the given piece """
         new_board: tuple[tuple[int, ...], ...]
         new_row: tuple[int, ...]
-        action_row: int = action.board_coords[0]
-        action_col: int = action.board_coords[1]
+        action_row: int
+        action_col: int
+        new_state: State
         
-        if not self.is_legal_place_piece(action):
-            return self.state
+        if not self.is_legal_place_piece(state, action):
+            return state
+        
+        action_row = action.board_coords[0]
+        action_col = action.board_coords[1]
         
         new_row = (
-            self.state.board[action_row][:action_col] 
-            + (self.state.given_piece, ) 
-            + self.state.board[action_row][action_col + 1:]
+            state.board[action_row][:action_col] 
+            + (state.given_piece, ) 
+            + state.board[action_row][action_col + 1:]
         )
         new_board = (
-            self.state.board[:action_row] 
+            state.board[:action_row] 
             + (new_row, ) 
-            + self.state.board[action_row + 1:]
+            + state.board[action_row + 1:]
         )
-        self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
-                             f"placed {PieceMask(self.state.given_piece).name} at ({action_row}, {action_col})")
-        
-        self.state = State(
+        new_state = State(
             new_board,
-            self.state.remaining_pieces,
+            state.remaining_pieces,
             PieceMask.EMPTY, # Reset given_piece
         )
         
-        return self.state
+        if update_state:
+            self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
+                                f"placed {PieceMask(self.state.given_piece).name} at ({action_row}, {action_col})")
+            self.state = new_state
+        
+        return new_state
     
     def check_winner(self, state: State) -> Winner:
         new_winner: Winner = Winner.NONE

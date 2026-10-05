@@ -38,14 +38,14 @@ class Controller:
             return
         elif self.mdl.state.given_piece == PieceMask.EMPTY:
             if self.mdl.is_p1_turn(self.mdl.state):
-                self.mdl.give_piece(self.p1.query_give_piece(self.mdl))
+                self.mdl.give_piece(self.mdl.state, self.p1.query_give_piece(self.mdl))
             else:
-                self.mdl.give_piece(self.p2.query_give_piece(self.mdl))
+                self.mdl.give_piece(self.mdl.state, self.p2.query_give_piece(self.mdl))
         elif self.mdl.state.given_piece != PieceMask.EMPTY:
             if self.mdl.is_p1_turn(self.mdl.state):
-                self.mdl.place_piece(self.p1.query_place_piece(self.mdl))
+                self.mdl.place_piece(self.mdl.state, self.p1.query_place_piece(self.mdl))
             else:
-                self.mdl.place_piece(self.p2.query_place_piece(self.mdl))
+                self.mdl.place_piece(self.mdl.state, self.p2.query_place_piece(self.mdl))
             
         self.vw.update(self.mdl)
         
