@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import Action, PieceMask, Winner
+from global_defs.state import Action, PiecePlace, PieceGive, Winner
 from global_defs.stats import Stats
 from model import Model
 
@@ -89,7 +89,7 @@ class TerminalView(View):
                 valid_piece = False
             
             if valid_piece:  
-                action = Action(piece=PieceMask[piece_name].value)
+                action = Action(piece=PieceGive[piece_name].value)
         else:
             self._warn(f"! Unknown input: {inp}")
             
@@ -101,7 +101,7 @@ class TerminalView(View):
         inp_split: list[str] = []
 
         self._print( f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} " \
-                    f"where would you like to place the {PieceMask(mdl.state.given_piece).name}", BColors.CYAN)
+                    f"where would you like to place the {PieceGive(mdl.state.given_piece).name}", BColors.CYAN)
         inp = input("> ").strip().lower()
         inp_split = inp.split(",")
         
@@ -156,6 +156,6 @@ class TerminalView(View):
             print("| ", end="")
             for piece in row:
                 # Represent each piece by the first letter of each category (i.e. BTSH for BLACK_TALL_SQUARE_HOLE)
-                piece_repr: str = "".join([s[0] for s in PieceMask(piece).name.split("_")])
+                piece_repr: str = "".join([s[0] for s in PiecePlace(piece).name.split("_")])
                 print(f"{piece_repr}\t| ", end="")
             print()

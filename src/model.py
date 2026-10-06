@@ -1,6 +1,7 @@
 from __future__ import annotations
-from global_defs.state import PieceMask, Action, State, Winner, WHITE_PIECES, BLACK_PIECES
+from global_defs.state import PiecePlace, PieceGive, Action, State, Winner, WHITE_PIECES, BLACK_PIECES
 from enum import StrEnum
+from time import perf_counter
 
 class Errors(StrEnum):
     NO_PIECE_TO_GIVE = "No piece to give"
@@ -17,20 +18,20 @@ class Model:
         if self.state == None:
             self.state = State(
                 (
-                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
-                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
-                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
-                    (PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY, PieceMask.EMPTY),
+                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
+                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
+                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
+                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
                 ),
                 WHITE_PIECES | BLACK_PIECES,
-                PieceMask.EMPTY,
+                PieceGive.EMPTY.value,
             )
     
     def is_p1_turn(self, state: State) -> bool:
         """ Returns whether the current action should be done by P1 (true) or P2 (false) """
         res: bool = False
         
-        if state.given_piece == PieceMask.EMPTY:
+        if state.given_piece == PieceGive.EMPTY:
             # If p1 pieces left == p2 pieces left and no piece has been given, it is p1's turn to give
             if state.remaining_pieces.bit_count() % 2 == 0:
                 res = True
@@ -74,7 +75,7 @@ class Model:
             is_legal = True
             
             # Check that the board space specified is EMPTY
-            if state.board[action.board_coords[0]][action.board_coords[1]] != PieceMask.EMPTY:
+            if state.board[action.board_coords[0]][action.board_coords[1]] != PiecePlace.EMPTY:
                 is_legal = False
                 self.error_log.append(Errors.BOARD_SPACE_OCCUPIED)
         else:
@@ -82,32 +83,34 @@ class Model:
         
         return is_legal
     
-    def legal_actions(self, state: State) -> list[Action]:
-        """ Returns a list of legal actions for the given state """
-        actions: list[Action] = []
+    def legal_give_actions(self, state: State) -> list[int]:
+        """ Return a list of legal pieces to give """
+        actions: list[int] = []
+        pieces: int = WHITE_PIECES if self.is_p1_turn(state) else BLACK_PIECES
+        shift: int = 0 if pieces == WHITE_PIECES else 8
         
-        if state.given_piece == PieceMask.EMPTY:
-            # Give piece actions
+        for i in range(pieces.bit_length()):
+            piece: int = (1 << i) << shift
+            if (state.remaining_pieces & piece) == piece:
+                actions.append(piece)
+                
+        return actions
+
+    def legal_place_actions(self, state: State) -> list[tuple[int, int]]:
+        """ Return a list of coordinates of empty spots on the board """
+        actions: list[tuple[int, int]] = []
+        
+        for r in range(len(state.board)):
+            for c in range(len(state.board[r])):
+                if state.board[r][c] == PiecePlace.EMPTY:
+                    actions.append((r, c))
             
-            for i in range((WHITE_PIECES | BLACK_PIECES).bit_length()):
-                action: Action = Action(piece=1 << i)
-                if self.is_legal_give_piece(state, action):
-                    actions.append(action)
-        else:
-            # Place piece actions
-            
-            for r in range(len(state.board)):
-                for c in range(len(state.board[r])):
-                    action: Action = Action(board_coords=(r, c))
-                    if self.is_legal_place_piece(state, action):
-                        actions.append(action)
-                        
         return actions
     
     def give_piece(self, state: State, action: Action, update_state: bool = True) -> State:
         """ Give the specified piece to the opposite player """
         new_remaining_pieces: int = state.remaining_pieces
-        given_piece: int = PieceMask.EMPTY
+        given_piece: int = PieceGive.EMPTY
         new_state: State
         
         if not self.is_legal_give_piece(state, action):
@@ -122,7 +125,7 @@ class Model:
         )
         
         if update_state:
-            self.move_log.append(f"{"P1 gave P2" if self.is_p1_turn(self.state) else "P2 gave P1"} a {PieceMask(given_piece).name}")
+            self.move_log.append(f"{"P1 gave P2" if self.is_p1_turn(self.state) else "P2 gave P1"} a {PieceGive(given_piece).name}")
             self.state = new_state
         
         return new_state
@@ -143,7 +146,7 @@ class Model:
         
         new_row = (
             state.board[action_row][:action_col] 
-            + (state.given_piece, ) 
+            + (PiecePlace[PieceGive(state.given_piece).name].value, )
             + state.board[action_row][action_col + 1:]
         )
         new_board = (
@@ -154,12 +157,12 @@ class Model:
         new_state = State(
             new_board,
             state.remaining_pieces,
-            PieceMask.EMPTY, # Reset given_piece
+            PieceGive.EMPTY.value, # Reset given_piece
         )
         
         if update_state:
             self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
-                                f"placed {PieceMask(self.state.given_piece).name} at ({action_row}, {action_col})")
+                                f"placed {PieceGive(self.state.given_piece).name} at ({action_row}, {action_col})")
             self.state = new_state
         
         return new_state
@@ -175,12 +178,12 @@ class Model:
             # Count each category
             # If at least one category has a count of the length of the board, the winner is the opposite player
             for i in range(len(state.board[j])):
-                row_categories: list[str] = [s[0:2] for s in PieceMask(state.board[j][i]).name.split("_")]
-                col_categories: list[str] = [s[0:2] for s in PieceMask(state.board[i][j]).name.split("_")]
-                dia_categories: list[str] = [PieceMask.EMPTY.name[0:2]]
+                row_categories: list[str] = [s[0:2] for s in PiecePlace(state.board[j][i]).name.split("_")]
+                col_categories: list[str] = [s[0:2] for s in PiecePlace(state.board[i][j]).name.split("_")]
+                dia_categories: list[str] = [PiecePlace.EMPTY.name[0:2]]
                 if j == 0:
-                    dia_categories = [s[0:2] for s in PieceMask(state.board[j + i][j + i]).name.split("_")]
-                    dia_categories = [s[0:2] for s in PieceMask(state.board[j + i][len(state.board) - 1 - i]).name.split("_")]
+                    dia_categories = [s[0:2] for s in PiecePlace(state.board[j + i][j + i]).name.split("_")]
+                    dia_categories = [s[0:2] for s in PiecePlace(state.board[j + i][len(state.board) - 1 - i]).name.split("_")]
 
                 for cat in row_categories:
                     if cat != "EM": # Filter out EMPTY board spaces
