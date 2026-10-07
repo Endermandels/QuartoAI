@@ -30,6 +30,17 @@ class Agent:
 
     def query_place_piece(self, mdl: Model) -> Action | None:
         return None
+    
+    def update_stats(self, mdl: Model) -> None:
+        """ Called at the end of the game """
+        if (mdl.winner == Winner.PLAYER_1 and self.is_p1) or (mdl.winner == Winner.PLAYER_2 and not self.is_p1):
+            self.stats.games_won += 1
+        elif (mdl.winner == Winner.PLAYER_2 and self.is_p1) or (mdl.winner == Winner.PLAYER_1 and not self.is_p1):
+            self.stats.games_lost += 1
+        else:
+            self.stats.games_tied += 1
+            
+        self.stats.games_played += 1
 
 class HumanAgent(Agent):
     def __init__(self, is_p1: bool, stats: Stats, vw: View):

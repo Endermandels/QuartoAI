@@ -12,25 +12,12 @@ class Controller:
         self.vw: View = vw
         self.p1: Agent = p1
         self.p2: Agent = p2
-    
-    def _update_agent_stats(self) -> None:
-        if self.mdl.winner == Winner.PLAYER_1:
-            self.p1.stats.games_won += 1
-            self.p2.stats.games_lost += 1
-        elif self.mdl.winner == Winner.PLAYER_2:
-            self.p2.stats.games_won += 1
-            self.p1.stats.games_lost += 1
-        else:
-            self.p1.stats.games_tied += 1
-            self.p2.stats.games_tied += 1
-            
-        self.p1.stats.games_played += 1
-        self.p2.stats.games_played += 1
 
     def update(self) -> None:
         if self.mdl.winner != Winner.NONE:
             self.vw.display_winner(self.mdl)
-            self._update_agent_stats()
+            self.p1.update_stats(self.mdl)
+            self.p2.update_stats(self.mdl)
             self.running = False
             return
         elif self.mdl.state.given_piece == PieceGive.EMPTY:
