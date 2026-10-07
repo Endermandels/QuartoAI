@@ -117,11 +117,10 @@ class TerminalView(View):
         return action
     
     def display_winner(self, mdl: Model) -> None:
-        winner: Winner = mdl.check_winner(mdl.state)
-        if winner == Winner.TIE:
+        if mdl.winner == Winner.TIE:
             self._print(f"* Tie!", BColors.YELLOW, True)
         else:
-            self._print(f"* {winner.name} Won!", BColors.GREEN, True)
+            self._print(f"* {mdl.winner.name} Won!", BColors.GREEN, True)
         self._print_board(mdl.state.board)
 
     def display_stats(self, stats: Stats) -> None:

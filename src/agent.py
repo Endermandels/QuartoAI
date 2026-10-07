@@ -5,7 +5,6 @@ from collections import defaultdict
 from model import Model
 from view import View
 from random import choice
-from time import perf_counter
 
 class Agent:
     def __init__(self, is_p1: bool, stats: Stats):
@@ -60,7 +59,7 @@ class HeuristicAgent(Agent):
             
             for r in range(len(mdl.state.board)):
                 for c in range(len(mdl.state.board[r])):
-                    if self._check_win(mdl, r, c, piece_place):
+                    if mdl.check_winner(mdl.state, r, c, piece_place) == (Winner.PLAYER_2 if self.is_p1 else Winner.PLAYER_1):
                         bad_piece = True
                         break
             
@@ -82,47 +81,12 @@ class HeuristicAgent(Agent):
         piece_place: int = PiecePlace[PieceGive(mdl.state.given_piece).name].value
         
         for space in legal_spaces:
-            if self._check_win(mdl, space[0], space[1], piece_place):
+            if mdl.check_winner(mdl.state, space[0], space[1], piece_place) == (Winner.PLAYER_1 if self.is_p1 else Winner.PLAYER_2):
                 winning_space = space
                 break
         
         return Action(board_coords=(winning_space if winning_space != None else choice(legal_spaces)))
     
-    def _check_win(self, mdl: Model, r: int, c: int, piece: int) -> bool:
-        """ Check if placing given piece at (r, c) results in a win """
-        is_win: bool = False
-        
-        if mdl.state.board[r][c] == PiecePlace.EMPTY:
-            AND: tuple[int, ...] = [piece, piece, piece, piece]
-            OR: tuple[int, ...] = [piece, piece, piece, piece]
-            is_diagonal_same: bool = (r == c)
-            is_diagonal_diff: bool = (len(mdl.state.board) - 1 - r == c)
-            
-            # Check win for this position's row, col (and potentially diagonal)
-            for i in range(len(mdl.state.board[r])):
-                if i != c:
-                    AND[0] &= mdl.state.board[r][i]
-                    OR[0] |= mdl.state.board[r][i]
-                if i != r:
-                    AND[1] &= mdl.state.board[i][c]
-                    OR[1] |= mdl.state.board[i][c]
-                
-                    if is_diagonal_same:
-                        AND[2] &= mdl.state.board[i][i]
-                        OR[2] |= mdl.state.board[i][i]
-                    elif is_diagonal_diff:
-                        AND[3] &= mdl.state.board[i][len(mdl.state.board) - 1 - i]
-                        OR[3] |= mdl.state.board[i][len(mdl.state.board) - 1 - i]
-                        
-            is_win = (
-                (AND[0] != 0 or OR[0].bit_count() < 4)
-                or (AND[1] != 0 or OR[1].bit_count() < 4)
-                or (is_diagonal_same and (AND[2] != 0 or OR[2].bit_count() < 4))
-                or (is_diagonal_diff and (AND[3] != 0 or OR[3].bit_count() < 4))
-            )
-            
-        return is_win
-
 class QLearnAgent(Agent):
     # store q values: {(state, action): -> q}
     # store epsilon (exploration rate)

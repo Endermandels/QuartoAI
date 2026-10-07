@@ -14,12 +14,10 @@ class Controller:
         self.p2: Agent = p2
     
     def _update_agent_stats(self) -> None:
-        winner: Winner = self.mdl.check_winner(self.mdl.state)
-        
-        if winner == Winner.PLAYER_1:
+        if self.mdl.winner == Winner.PLAYER_1:
             self.p1.stats.games_won += 1
             self.p2.stats.games_lost += 1
-        elif winner == Winner.PLAYER_2:
+        elif self.mdl.winner == Winner.PLAYER_2:
             self.p2.stats.games_won += 1
             self.p1.stats.games_lost += 1
         else:
@@ -30,9 +28,7 @@ class Controller:
         self.p2.stats.games_played += 1
 
     def update(self) -> None:
-        winner: Winner = self.mdl.check_winner(self.mdl.state)
-        
-        if winner != Winner.NONE:
+        if self.mdl.winner != Winner.NONE:
             self.vw.display_winner(self.mdl)
             self._update_agent_stats()
             self.running = False
@@ -55,7 +51,7 @@ class Controller:
             return
         
     def run(self) -> None:
-        start_time: float = perf_counter()
+        # start_time: float = perf_counter()
         self.running = True
         
         while (self.running):

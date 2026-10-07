@@ -1,7 +1,6 @@
 from __future__ import annotations
 from global_defs.state import PiecePlace, PieceGive, Action, State, Winner, WHITE_PIECES, BLACK_PIECES
 from enum import StrEnum
-from time import perf_counter
 
 class Errors(StrEnum):
     NO_PIECE_TO_GIVE = "No piece to give"
@@ -13,6 +12,7 @@ class Model:
         self.state: State = start_state
         self.error_log: list[Errors] = []
         self.move_log: list[str] = []
+        self.winner: Winner = Winner.NONE
         
         # Default State
         if self.state == None:
@@ -136,6 +136,7 @@ class Model:
         new_row: tuple[int, ...]
         action_row: int
         action_col: int
+        piece_place: int
         new_state: State
         
         if not self.is_legal_place_piece(state, action):
@@ -143,10 +144,11 @@ class Model:
         
         action_row = action.board_coords[0]
         action_col = action.board_coords[1]
+        piece_place = PiecePlace[PieceGive(state.given_piece).name].value
         
         new_row = (
             state.board[action_row][:action_col] 
-            + (PiecePlace[PieceGive(state.given_piece).name].value, )
+            + (piece_place, )
             + state.board[action_row][action_col + 1:]
         )
         new_board = (
@@ -163,68 +165,49 @@ class Model:
         if update_state:
             self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
                                 f"placed {PieceGive(self.state.given_piece).name} at ({action_row}, {action_col})")
+            self.winner = self.check_winner(self.state, action_row, action_col, piece_place)
             self.state = new_state
         
         return new_state
     
-    def check_winner(self, state: State) -> Winner:
-        new_winner: Winner = Winner.NONE
-        at_least_one_empty: bool = False # Keeps track of whether there is at least one EMPTY space left
+    def check_winner(self, state: State, r: int, c: int, piece: int) -> Winner:
+        """ Check if placing given piece at (r, c) results in a win """
+        winner: Winner = Winner.NONE
         
-        for j in range(len(state.board)):
-            category_counts: dict = {} # key = category (i.e. "WH" for white), value = count
+        if state.board[r][c] == PiecePlace.EMPTY:
+            AND: tuple[int, ...] = [piece, piece, piece, piece]
+            OR: tuple[int, ...] = [piece, piece, piece, piece]
+            is_diagonal_same: bool = (r == c)
+            is_diagonal_diff: bool = (len(state.board) - 1 - r == c)
             
-            # Check rows, columns and diagonals
-            # Count each category
-            # If at least one category has a count of the length of the board, the winner is the opposite player
-            for i in range(len(state.board[j])):
-                row_categories: list[str] = [s[0:2] for s in PiecePlace(state.board[j][i]).name.split("_")]
-                col_categories: list[str] = [s[0:2] for s in PiecePlace(state.board[i][j]).name.split("_")]
-                dia_categories: list[str] = [PiecePlace.EMPTY.name[0:2]]
-                if j == 0:
-                    dia_categories = [s[0:2] for s in PiecePlace(state.board[j + i][j + i]).name.split("_")]
-                    dia_categories = [s[0:2] for s in PiecePlace(state.board[j + i][len(state.board) - 1 - i]).name.split("_")]
-
-                for cat in row_categories:
-                    if cat != "EM": # Filter out EMPTY board spaces
-                        rcat: str = "R" + cat
-                        if rcat in category_counts:
-                            category_counts[rcat] += 1
-                        else:
-                            category_counts[rcat] = 1
-                    else:
-                        at_least_one_empty = True # This should cover the whole board
-
-                for cat in col_categories:
-                    if cat != "EM": # Filter out EMPTY board spaces
-                        ccat: str = "C" + cat
-                        if ccat in category_counts:
-                            category_counts[ccat] += 1
-                        else:
-                            category_counts[ccat] = 1
-
-                for cat in dia_categories:
-                    if cat != "EM": # Filter out EMPTY board spaces
-                        dcat: str = "D" + cat
-                        if dcat in category_counts:
-                            category_counts[dcat] += 1
-                        else:
-                            category_counts[dcat] = 1
+            # Check win for this position's row, col (and potentially diagonal)
+            for i in range(len(state.board[r])):
+                if i != c:
+                    AND[0] &= state.board[r][i]
+                    OR[0] |= state.board[r][i]
+                if i != r:
+                    AND[1] &= state.board[i][c]
+                    OR[1] |= state.board[i][c]
+                
+                    if is_diagonal_same:
+                        AND[2] &= state.board[i][i]
+                        OR[2] |= state.board[i][i]
+                    elif is_diagonal_diff:
+                        AND[3] &= state.board[i][len(state.board) - 1 - i]
+                        OR[3] |= state.board[i][len(state.board) - 1 - i]
             
-            for value in category_counts.values():
-                if value == len(state.board):
-                    # The last person who placed a piece then goes to give a piece
-                    if self.is_p1_turn(state):
-                        new_winner = Winner.PLAYER_1
-                    else:
-                        new_winner = Winner.PLAYER_2
-                    break
+            # Each piece is a bitmask of categories
+            # For pieces AND'd together, if they retain a one, that means that category is present in all 4 spots
+            # For pieces OR'd together, if they retain a zero, and they do not have any empty spaces, 
+            #   that means that category is present in all 4 spots
+            if (
+                (AND[0] != 0 or ((OR[0] & PiecePlace.EMPTY) == 0 and OR[0].bit_count() < 4))
+                or (AND[1] != 0 or ((OR[1] & PiecePlace.EMPTY) == 0 and OR[1].bit_count() < 4))
+                or (is_diagonal_same and (AND[2] != 0 or ((OR[2] & PiecePlace.EMPTY) == 0 and OR[2].bit_count() < 4)))
+                or (is_diagonal_diff and (AND[3] != 0 or ((OR[3] & PiecePlace.EMPTY) == 0 and OR[3].bit_count() < 4)))
+            ):
+                winner = Winner.PLAYER_1 if (PieceGive[PiecePlace(piece).name] & WHITE_PIECES) == 0 else Winner.PLAYER_2
+            elif state.remaining_pieces == 0:
+                winner = Winner.TIE
             
-            if new_winner != Winner.NONE:
-                break
-        
-        # If there is no winner and the board is full, game is tied
-        if new_winner == Winner.NONE and not at_least_one_empty:
-            new_winner = Winner.TIE
-        
-        return new_winner
+        return winner
