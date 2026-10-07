@@ -211,3 +211,21 @@ class Model:
                 winner = Winner.TIE
             
         return winner
+    
+    def reward(self, state: State, action: Action, is_p1: bool) -> float:
+        rew: float = 0.0
+        
+        if self.is_legal_place_piece(state, action):
+            r: int = action.board_coords[0]
+            c: int = action.board_coords[1]
+            piece: int = PiecePlace[PieceGive(state.given_piece).name].value
+            winner: Winner = self.check_winner(state, r, c, piece)
+            
+            if winner == Winner.NONE:
+                rew = 0.0
+            elif (winner == Winner.PLAYER_1 and is_p1) or (winner == Winner.PLAYER_2 and not is_p1):
+                rew = 1.0
+            elif winner != Winner.TIE:
+                -1.0
+        
+        return rew

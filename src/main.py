@@ -2,7 +2,7 @@ from global_defs.stats import Stats
 from controller import Controller
 from view import View, TerminalView
 from model import Model
-from agent import HeuristicAgent, RandomAgent, HumanAgent, Agent
+from agent import HeuristicAgent, RandomAgent, HumanAgent, QLearnAgent, Agent
 from time import perf_counter
 
 RUNS: int = 1000
@@ -13,7 +13,8 @@ def train(runs) -> None:
     p1: Agent = RandomAgent(True, Stats("Random 1"))
     # p2: Agent = HumanAgent(False, Stats("Human 2"), vwt)
     # p2: Agent = RandomAgent(False, Stats("Random 2"))
-    p2: Agent = HeuristicAgent(False, Stats("Heuristic 2"))
+    # p2: Agent = HeuristicAgent(False, Stats("Heuristic 2"))
+    p2: Agent = QLearnAgent(False, Stats("Q-Learn 2"))
     start_time: float = perf_counter()
     end_time: float
     
