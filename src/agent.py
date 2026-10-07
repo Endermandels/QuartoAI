@@ -4,7 +4,21 @@ from global_defs.stats import Stats
 from collections import defaultdict
 from model import Model
 from view import View
-from random import choice
+from random import choice, random
+
+"""
+- **Goal:** learn Q(s,a), the expected total future reward of taking action a in state s and then playing well afterward.
+- **Update rule:** Q(s,a) ← Q(s,a) + α · [r + γ · max Q(s',a') − Q(s,a)]. You move your estimate toward a target built from the reward plus your best estimate of the next state.
+- **Bootstrapping:** the target uses your own current estimates, so you learn from guesses of guesses. Values propagate backward from rewards (e.g., a win) over many episodes.
+- **Off-policy:** it learns the value of the greedy policy (the max) even while you act with an exploratory one.
+- **Exploration vs. exploitation:** epsilon-greedy balances trying new actions against using what you know. Decay ε over training.
+- **Hyperparameters:** α (learning rate), γ (discount), ε (exploration rate).
+- **Terminal states:** no future, so the target is just r.
+- **Sparse rewards:** with only win/loss at the end, learning is slow early on because most updates have nothing to propagate yet.
+- **Tabular limits:** a table only works when the state space is small enough to visit repeatedly. This is why DQN replaces the table with a neural network that generalizes.
+- **Convergence:** it provably converges to the optimal Q-values if every state-action pair is visited enough and α decays appropriately. In practice you use a fixed small α.
+- **Opponent matters:** in a game, the opponent is part of the environment, so what the agent learns is tuned to the opponent it trained against.
+"""
 
 class Agent:
     def __init__(self, is_p1: bool, stats: Stats):
@@ -99,13 +113,52 @@ class QLearnAgent(Agent):
     
     def __init__(self, is_p1, stats, epsilon: int = 0.5, alpha: int = 0.5, gamma: int = 0.5):
         super().__init__(is_p1, stats)
-        self.epsilon = epsilon
-        self.alpha = alpha
-        self.gamma = gamma
         
-        self.q_table = defaultdict(float) # default q of 0; populate q as agent encounters state, action pairs
+        # Exploration rate of making random moves
+        self.epsilon: int = epsilon
+
+        # Learning rate of q values
+        self.alpha: int = alpha
+        
+        # Discount rate of future rewards
+        self.gamma: int = gamma
+        
+        # Usefulness of each action at a given state
+        self.q_table: dict[State, Action] = defaultdict(float) # default q of 0; populate q as agent encounters state, action pairs
+        
+        # Remember previous move for updating
+        self.prev_move: tuple[State, Action] = (None, None)
     
-    def _update_q_table(self, state: State, action: Action) -> None:
-        """ Update q table based on observation of what state the given action produced """
-        pass
-    
+    def _learn(self, mdl: Model, state: State, action: Action, max_q: float) -> None:
+        self.q_table[state, action] += self.alpha * ( \
+            mdl.reward(state, action, self.is_p1) + self.gamma * max_q - self.q_table[state, action] \
+        )
+
+    def _get_action(self, mdl: Model, legal_actions: list[Action]) -> Action:
+        best_action: Action = legal_actions[0]
+        best_q: float = -9999999
+        
+        # TODO: Add epsilon decay
+        
+        if random() <= self.epsilon:
+            # Exploration
+            best_action = choice(legal_actions)
+        else:
+            # Greedy
+            for a in legal_actions:
+                q = self.q_table[mdl.state, a]
+                if q > best_q:
+                    best_q = q
+                    best_action = a
+        
+        return best_action
+
+    def query_give_piece(self, mdl: Model) -> Action | None:
+        legal_actions: list[Action] = [Action(piece=p) for p in mdl.legal_give_actions(mdl.state)]
+
+        return self._get_action(mdl, legal_actions)
+
+    def query_place_piece(self, mdl: Model) -> Action | None:
+        legal_actions: list[Action] = [Action(board_coords=s) for s in mdl.legal_place_actions(mdl.state)]
+        
+        return self._get_action(mdl, legal_actions)
