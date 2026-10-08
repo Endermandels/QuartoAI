@@ -5,6 +5,7 @@ from collections import defaultdict
 from model import Model
 from view import View
 from random import choice, random
+import math
 
 """
 - **Goal:** learn Q(s,a), the expected total future reward of taking action a in state s and then playing well afterward.
@@ -122,11 +123,12 @@ class QLearnAgent(Agent):
     # where Q(s', a') is the q value of the next state given the next action
     # the update rule uses back propogation, so the next state is actually the current state
     
-    def __init__(self, is_p1, stats, epsilon: int = 0.5, alpha: int = 0.5, gamma: int = 0.5):
+    def __init__(self, is_p1, stats, epsilon: int = 0.7, alpha: int = 0.1, gamma: int = 1.0, epsilon_decay_rate: float = 0):
         super().__init__(is_p1, stats)
         
         # Exploration rate of making random moves
         self.epsilon: int = epsilon
+        self.epsilon_decay_rate: float = epsilon_decay_rate
 
         # Learning rate of q values
         self.alpha: int = alpha
@@ -139,37 +141,57 @@ class QLearnAgent(Agent):
         
         # Remember previous move for updating
         self.prev_move: tuple[State, Action] = (None, None)
+        
+        # Debugging stats
+        self.hit_rate = 0
+        self.lookups = 0
     
-    def _learn(self, mdl: Model, state: State, action: Action, max_q: float) -> None:
-        self.q_table[state, action] += self.alpha * ( \
-            mdl.reward(state, action, self.is_p1) + self.gamma * max_q - self.q_table[state, action] \
-        )
-
-    def _get_action(self, mdl: Model, legal_actions: list[Action]) -> Action:
+    def update_stats(self, mdl: Model) -> None:
+        """ Called at the end of the game """
+        super().update_stats(mdl)
+        self._learn(self.prev_move[0], self.prev_move[1], mdl.final_reward(self.is_p1), 0.0)
+        self.prev_move = (None, None)
+        self._decay_epsilon()
+    
+    def _decay_epsilon(self) -> float:
+        if self.epsilon > 0.05:
+            self.epsilon = max(self.epsilon - self.epsilon_decay_rate, 0.05)
+    
+    def _learn(self, state: State, action: Action, r: float, max_q: float) -> None:
+        future_r: float = self.gamma * max_q
+        self.q_table[state, action] += self.alpha * (r + future_r - self.q_table[state, action])
+    
+    def _get_best_action_q(self, mdl: Model, legal_actions: list[Action]) -> tuple[float, Action]:
         best_action: Action = legal_actions[0]
         best_q: float = -9999999
+                
+        for a in legal_actions:
+            self.lookups += 1
+            if (mdl.state, a) in self.q_table:
+                self.hit_rate += 1
+            q = self.q_table[mdl.state, a]
+            if q > best_q:
+                best_q = q
+                best_action = a
         
-        # TODO: Add epsilon decay
-        
-        if random() <= self.epsilon:
-            # Exploration
-            best_action = choice(legal_actions)
-        else:
-            # Greedy
-            for a in legal_actions:
-                q = self.q_table[mdl.state, a]
-                if q > best_q:
-                    best_q = q
-                    best_action = a
-        
-        return best_action
+        return best_q, best_action
 
     def query_give_piece(self, mdl: Model) -> Action | None:
         legal_actions: list[Action] = [Action(piece=p) for p in mdl.legal_give_actions(mdl.state)]
+        q, best_action = self._get_best_action_q(mdl, legal_actions)
+        action: Action = choice(legal_actions) if random() <= self.epsilon else best_action
+        
+        self._learn(self.prev_move[0], self.prev_move[1], 0, q)
+        self.prev_move = (mdl.state, action)
 
-        return self._get_action(mdl, legal_actions)
-
+        return action
+    
     def query_place_piece(self, mdl: Model) -> Action | None:
         legal_actions: list[Action] = [Action(board_coords=s) for s in mdl.legal_place_actions(mdl.state)]
-        
-        return self._get_action(mdl, legal_actions)
+        q, best_action = self._get_best_action_q(mdl, legal_actions)
+        action: Action = choice(legal_actions) if random() <= self.epsilon else best_action
+                
+        self._learn(self.prev_move[0], self.prev_move[1], 0, q)
+        self.prev_move = (mdl.state, action)
+
+        return action
