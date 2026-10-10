@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import Action, PiecePlace, PieceGive, Winner, State, GRID_LEN, PIECE_SIZE, PIECE_MASK
+from global_defs.state import *
 from global_defs.stats import Stats
 from model import Model
 
@@ -25,11 +25,11 @@ class View:
     def __init__(self):
         self.quit_input: bool = False # Input to quit the game
     
-    def query_give_piece(self, mdl: Model) -> Action | None:
+    def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
         """ Returns the piece to give to the other player, or None on a different input (i.e. quit) """
         return None
     
-    def query_place_piece(self, mdl: Model) -> Action | None:
+    def query_place_piece(self, mdl: Model) -> tuple[int, ...] | None:
         """ Returns the coords to place the given piece, or None on a different input (i.e. quit) """
         return None
     
@@ -47,8 +47,8 @@ class TerminalView(View):
         super().__init__()
         self._print("$$$ Quarto AI $$$", BColors.GREEN, True)
         
-    def query_give_piece(self, mdl: Model) -> Action | None:
-        action: Action = None
+    def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
+        action: tuple[int, ...] = None
         inp: str = ""
 
         self._print(f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} which piece would you like to give", BColors.CYAN)        
@@ -89,19 +89,19 @@ class TerminalView(View):
                 valid_piece = False
             
             if valid_piece:  
-                action = Action(piece=PieceGive[piece_name].value)
+                action = (ACTION_SPACE_DEFAULT, Piece[piece_name].value)
         else:
             self._warn(f"! Unknown input: {inp}")
             
         return action
         
-    def query_place_piece(self, mdl: Model) -> Action | None:
-        action: Action = None
+    def query_place_piece(self, mdl: Model) -> tuple[int, ...] | None:
+        action: tuple[int, ...] = None
         inp: str = ""
         inp_split: list[str] = []
 
         self._print( f"? {"P1" if mdl.is_p1_turn(mdl.state) else "P2"} " \
-                    f"where would you like to place the {PieceGive(mdl.state.given_piece).name}", BColors.CYAN)
+                    f"where would you like to place the {Piece(mdl.state[STATE_GIVEN_IDX] & STATE_GIVEN__PIECE_MASK).name}", BColors.CYAN)
         inp = input("> ").strip().lower()
         inp_split = inp.split(",")
         
@@ -110,7 +110,7 @@ class TerminalView(View):
         elif inp in ["p", "print"]:
             self._print_board(mdl.state)
         elif len(inp_split) == 2 and all([s.isdigit() for s in inp_split]):
-            action = Action(space=(int(inp_split[0]) * GRID_LEN) + int(inp_split[1]))
+            action = (int(inp_split[0]) * GRID_LEN + int(inp_split[1]), ACTION_PIECE_DEFAULT)
         else:
             self._warn(f"! Unknown input: {inp}")
         
@@ -149,7 +149,7 @@ class TerminalView(View):
         """ Print an error string """
         print(f"{BColors.BOLD}{ERROR_COL}{string}{BColors.ENDC}")
         
-    def _print_board(self, state: State) -> None:
+    def _print_board(self, state: tuple[int, ...]) -> None:
         """ Prints the given board """
         for space in range(GRID_LEN * GRID_LEN):
             piece_repr: str 
@@ -158,11 +158,11 @@ class TerminalView(View):
                 print("| ", end="")
             
             # Represent each piece by the first letter of each category (i.e. BTSH for BLACK_TALL_SQUARE_HOLE)
-            if state.empty & (1 << space) != 0:
+            if state[STATE_EMPTY_IDX] & (1 << space) != 0:
                 piece_repr = "E"
             else:
                 piece_repr = "".join( \
-                    [s[0] for s in PiecePlace((state.board >> (space * PIECE_SIZE)) & PIECE_MASK).name.split("_")] \
+                    [s[0] for s in Piece((state[STATE_BOARD_IDX] >> (space * PIECE_SIZE)) & PIECE_MASK).name.split("_")] \
                 )
             
             print(f"{piece_repr}\t| ", end="")

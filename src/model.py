@@ -1,215 +1,232 @@
 from __future__ import annotations
-from global_defs.state import (
-    PiecePlace, PieceGive, Action, State, Winner, 
-    WHITE_PIECES, BLACK_PIECES, ALL_EMPTY, GRID_LEN, PIECE_SIZE, PIECE_MASK
-)
+from global_defs.state import *
 from enum import StrEnum
 
 class Errors(StrEnum):
     NO_PIECE_TO_GIVE = "No piece to give"
+    GIVE_PIECE_EXISTS = "A piece has already been given"
     BOARD_SPACE_OCCUPIED = "Board space occupied"
     COORDINATES_OUT_OF_BOUNDS = "Coordinates are out of bounds"
     
+    
 class Model:
-    def __init__(self, start_state: State = None):
-        self.state: State = start_state
+    def __init__(self, start_state: tuple[int, ...] = None, keep_logs: bool = False):
+        self.state: tuple[int, ...] = start_state
+        self.keep_logs = keep_logs
         self.error_log: list[Errors] = []
         self.move_log: list[str] = []
         self.winner: Winner = Winner.NONE
-        
+        self.LINES: dict[int, list[tuple[int, ...]]] = self._compute_lines()
+                
         # Default State
         if self.state == None:
-            self.state = State(
-                0,
-                ALL_EMPTY,
-                WHITE_PIECES | BLACK_PIECES,
-                PieceGive.EMPTY.value,
+            self.state = (
+                STATE_BOARD_DEFAULT,
+                STATE_EMPTY_DEFAULT,
+                STATE_REMAINING_DEFAULT,
+                STATE_GIVEN_DEFAULT,
             )
     
-    def is_p1_turn(self, state: State) -> bool:
-        """ Returns whether the current action should be done by P1 (true) or P2 (false) """
-        res: bool = False
-        
-        if state.given_piece == PieceGive.EMPTY:
-            # If p1 pieces left == p2 pieces left and no piece has been given, it is p1's turn to give
-            if state.remaining_pieces.bit_count() % 2 == 0:
-                res = True
-            # If p1 pieces left != p2 pieces left and no piece has been given, it is p2's turn to give
-             
-        # If a black piece has been given, it is p1's turn to place 
-        elif (state.given_piece & BLACK_PIECES) != 0:
-            res = True
-            
-        # If a white piece has been given, it is p2's turn to place
-        
-        return res
+    def is_give_phase(self, state: tuple[int, ...]) -> bool:
+        """ Returns whether the current phase is the give phase (true) or the place phase (false) """
+        return (state[STATE_GIVEN_IDX] & STATE_GIVEN__PIECE_MASK) == EMPTY_PIECE
     
-    def is_legal_give_piece(self, state: State, action: Action) -> bool:
+    def is_p1_turn(self, state: tuple[int, ...]) -> bool:
+        """ Returns whether the current action should be done by P1 (true) or P2 (false) """
+        return (state[STATE_GIVEN_IDX] & STATE_GIVEN__IS_P1_TURN_MASK) == STATE_GIVEN__IS_P1_TURN_MASK
+    
+    def is_legal_give_piece(self, state: tuple[int, ...], action: tuple[int, ...] | None) -> bool:
         is_legal: bool = False
-        pieces: int = state.remaining_pieces
         
         if action == None:
             return is_legal
-        
+    
         # Check that current player has the desired piece available to give
-        pieces = (pieces & WHITE_PIECES) if self.is_p1_turn(state) else (pieces & BLACK_PIECES)
-        if (action.piece & pieces) == action.piece:
+        if ((state[STATE_REMAINING_IDX] >> action[ACTION_PIECE_IDX]) & 1) == 1:
             is_legal = True
-        else:
+        
+            # Check that there is no current given piece
+            if (state[STATE_GIVEN_IDX] & STATE_GIVEN__PIECE_MASK) != EMPTY_PIECE:
+                is_legal = False
+                if self.keep_logs:
+                    self.error_log.append(Errors.GIVE_PIECE_EXISTS)
+        elif self.keep_logs:
             self.error_log.append(Errors.NO_PIECE_TO_GIVE)
         
         return is_legal
     
-    def is_legal_place_piece(self, state: State, action: Action) -> bool:
+    def is_legal_place_piece(self, state: tuple[int, ...], action: tuple[int, ...]) -> bool:
         is_legal: bool = False
         
         if action == None:
             return is_legal
         
         # Check that the specified coordinates are within the board
-        if 0 <= action.space and action.space < GRID_LEN * GRID_LEN:
+        if 0 <= action[ACTION_SPACE_IDX] and action[ACTION_SPACE_IDX] < GRID_LEN * GRID_LEN:
             is_legal = True
             
             # Check that the board space specified is EMPTY
-            if ((state.empty >> action.space) & 1) != 1:
+            if ((state[STATE_EMPTY_IDX] >> action[ACTION_SPACE_IDX]) & 1) != 1:
                 is_legal = False
-                self.error_log.append(Errors.BOARD_SPACE_OCCUPIED)
-        else:
+                if self.keep_logs:
+                    self.error_log.append(Errors.BOARD_SPACE_OCCUPIED)
+        elif self.keep_logs:
             self.error_log.append(Errors.COORDINATES_OUT_OF_BOUNDS)
         
         return is_legal
     
-    def legal_give_actions(self, state: State) -> list[int]:
+    def legal_give_actions(self, state: tuple[int, ...]) -> list[int]:
         """ Return a list of legal pieces to give """
         actions: list[int] = []
-        pieces: int = WHITE_PIECES if self.is_p1_turn(state) else BLACK_PIECES
-        shift: int = 0 if pieces == WHITE_PIECES else 8
+        shift: int = 0 if self.is_p1_turn(state) else WHITE_PIECES_SIZE
         
-        for i in range(pieces.bit_length()):
-            piece: int = (1 << i) << shift
-            if (state.remaining_pieces & piece) == piece:
+        for i in range(WHITE_PIECES_SIZE):
+            piece: int = i + shift
+            if (state[STATE_REMAINING_IDX] & (1 << piece)) != 0:
                 actions.append(piece)
                 
         return actions
 
-    def legal_place_actions(self, state: State) -> list[int]:
+    def legal_place_actions(self, state: tuple[int, ...]) -> list[int]:
         """ Return a list of empty spaces on the board """
         actions: list[int] = []
         
         for i in range(GRID_LEN * GRID_LEN):
-            if ((state.empty >> i) & 1) == 1:
+            if ((state[STATE_EMPTY_IDX] >> i) & 1) == 1:
                 actions.append(i)
             
         return actions
     
-    def give_piece(self, state: State, action: Action, update_state: bool = True) -> State:
+    def give_piece(self, state: tuple[int, ...], action: tuple[int, ...], update_state: bool = True) -> tuple[int, ...]:
         """ Give the specified piece to the opposite player """
-        new_remaining_pieces: int = state.remaining_pieces
-        given_piece: int = PieceGive.EMPTY
-        new_state: State
+        new_state: tuple[int, ...]
+        new_turn_mask: int = (state[STATE_GIVEN_IDX] & STATE_GIVEN__IS_P1_TURN_MASK) ^ STATE_GIVEN__IS_P1_TURN_MASK
         
         if not self.is_legal_give_piece(state, action):
             return state
         
-        new_remaining_pieces = state.remaining_pieces & (~action.piece)
-        given_piece = action.piece
-        new_state = State(
-            state.board,
-            state.empty,
-            new_remaining_pieces,
-            given_piece,
+        new_state = (
+            state[STATE_BOARD_IDX],
+            state[STATE_EMPTY_IDX],
+            state[STATE_REMAINING_IDX] & (~(1 << action[ACTION_PIECE_IDX])),
+            action[ACTION_PIECE_IDX] | new_turn_mask, # Switch turns
         )
         
         if update_state:
-            self.move_log.append(f"{"P1 gave P2" if self.is_p1_turn(self.state) else "P2 gave P1"} a {PieceGive(given_piece).name}")
+            if self.keep_logs:
+                self.move_log.append(f"{"P1 gave P2" if self.is_p1_turn(self.state) else "P2 gave P1"}" \
+                                     f" a {Piece(action[ACTION_PIECE_IDX]).name}")
             self.state = new_state
         
         return new_state
     
-    def place_piece(self, state: State, action: Action, update_state: bool = True) -> State:
+    def place_piece(self, state: tuple[int, ...], action: tuple[int, ...], update_state: bool = True) -> tuple[int, ...]:
         """ Opposite player places the given piece """
-        piece_place: int
-        new_state: State
+        new_state: tuple[int, ...]
         
         if not self.is_legal_place_piece(state, action):
             return state
         
-        piece_place = PiecePlace[PieceGive(state.given_piece).name].value
-        
-        new_state = State(
-            state.board | (piece_place << (action.space * PIECE_SIZE)),
-            state.empty & (~(1 << action.space)), # Clear empty space
-            state.remaining_pieces,
-            PieceGive.EMPTY.value, # Reset given_piece
+        new_state = (
+            state[STATE_BOARD_IDX] | ((state[STATE_GIVEN_IDX] & STATE_GIVEN__PIECE_MASK) << (action[ACTION_SPACE_IDX] * PIECE_SIZE)),
+            state[STATE_EMPTY_IDX] & (~(1 << action[ACTION_SPACE_IDX])), # Clear empty space
+            state[STATE_REMAINING_IDX],
+            (state[STATE_GIVEN_IDX] & STATE_GIVEN__IS_P1_TURN_MASK) | EMPTY_PIECE, # Reset given_piece
         )
         
         if update_state:
-            self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
-                                f"placed {PieceGive(self.state.given_piece).name} at " \
-                                f"({int(action.space / GRID_LEN)}, {action.space % GRID_LEN})")
-            self.winner = self.check_winner(self.state, action.space, piece_place)
+            if self.keep_logs:
+                self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
+                                    f"placed {Piece(self.state[STATE_GIVEN_IDX] & STATE_GIVEN__PIECE_MASK).name} at " \
+                                    f"({int(action[ACTION_SPACE_IDX] / GRID_LEN)}, {action[ACTION_SPACE_IDX] % GRID_LEN})")
+                
+            if self.check_winner_fast(new_state[STATE_BOARD_IDX], new_state[STATE_EMPTY_IDX], action[ACTION_SPACE_IDX]):
+                self.winner = Winner.PLAYER_1 if self.is_p1_turn(self.state) else Winner.PLAYER_2
+            elif new_state[STATE_EMPTY_IDX] == 0:
+                self.winner = Winner.TIE
+            
             self.state = new_state
         
         return new_state
     
-    def check_winner(self, state: State, space: int, piece: int) -> Winner:
-        """ Check if placing given piece at given space results in a win """
-        winner: Winner = Winner.NONE
+    def check_winner_fast(self, board: int, empty: int, space: int) -> bool:
+        """ Check if the given space shows in a win """
+        is_win: bool = False
         
-        if (state.empty & (1 << space)) != 0:
-            r: int = int(space / GRID_LEN)
-            c: int = space % GRID_LEN
-            AND: tuple[int, ...] = [piece, piece, piece, piece]
-            OR: tuple[int, ...] = [piece, piece, piece, piece]
-            is_diagonal_same: bool = (r == c)
-            is_diagonal_diff: bool = (GRID_LEN - 1 - r == c)
+        for empty_mask, s0, s1, s2, s3 in self.LINES[space]:
+            if empty & empty_mask != 0:
+                continue # there is an empty space in this sequence, so no win is possible
+            a: int = (board >> (s0 * PIECE_SIZE)) & PIECE_MASK
+            b: int = (board >> (s1 * PIECE_SIZE)) & PIECE_MASK
+            c: int = (board >> (s2 * PIECE_SIZE)) & PIECE_MASK
+            d: int = (board >> (s3 * PIECE_SIZE)) & PIECE_MASK
+            if (a & b & c & d) != 0 or ((~(a | b | c | d) & PIECE_MASK) != 0):
+                is_win = True
+                break
+        
+        if is_win:
+            pass
+        
+        return is_win
+    
+    # def check_winner(self, state: tuple[int, ...], space: int, piece: int) -> Winner:
+    #     """ Check if placing given piece at given space results in a win """
+    #     winner: Winner = Winner.NONE
+        
+    #     if (state.empty & (1 << space)) != 0:
+    #         r: int = int(space / GRID_LEN)
+    #         c: int = space % GRID_LEN
+    #         AND: tuple[int, ...] = [piece, piece, piece, piece]
+    #         OR: tuple[int, ...] = [piece, piece, piece, piece]
+    #         is_diagonal_same: bool = (r == c)
+    #         is_diagonal_diff: bool = (GRID_LEN - 1 - r == c)
             
-            # Check win for this position's row, col (and potentially diagonal)
-            for i in range(GRID_LEN):
-                shift: int
-                board_piece: int 
-                empty_penalty: int
-                if i != c:
-                    shift = ((GRID_LEN * r) + i)
-                    board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-                    empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-                    AND[0] &= board_piece
-                    OR[0] |= board_piece | empty_penalty # if empty space, board_piece will be 0, which is a valid piece
-                if i != r:
-                    shift = ((GRID_LEN * i) + c)
-                    board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-                    empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-                    AND[1] &= board_piece
-                    OR[1] |= board_piece | empty_penalty
+    #         # Check win for this position's row, col (and potentially diagonal)
+    #         for i in range(GRID_LEN):
+    #             shift: int
+    #             board_piece: int 
+    #             empty_penalty: int
+    #             if i != c:
+    #                 shift = ((GRID_LEN * r) + i)
+    #                 board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+    #                 empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+    #                 AND[0] &= board_piece
+    #                 OR[0] |= board_piece | empty_penalty # if empty space, board_piece will be 0, which is a valid piece
+    #             if i != r:
+    #                 shift = ((GRID_LEN * i) + c)
+    #                 board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+    #                 empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+    #                 AND[1] &= board_piece
+    #                 OR[1] |= board_piece | empty_penalty
                 
-                    if is_diagonal_same:
-                        shift = ((GRID_LEN * i) + i)
-                        board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-                        empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-                        AND[2] &= board_piece
-                        OR[2] |= board_piece | empty_penalty
-                    elif is_diagonal_diff:
-                        shift = ((GRID_LEN * i) + (GRID_LEN - 1 - i))
-                        board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-                        empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-                        AND[3] &= board_piece
-                        OR[3] |= board_piece | empty_penalty
+    #                 if is_diagonal_same:
+    #                     shift = ((GRID_LEN * i) + i)
+    #                     board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+    #                     empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+    #                     AND[2] &= board_piece
+    #                     OR[2] |= board_piece | empty_penalty
+    #                 elif is_diagonal_diff:
+    #                     shift = ((GRID_LEN * i) + (GRID_LEN - 1 - i))
+    #                     board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+    #                     empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+    #                     AND[3] &= board_piece
+    #                     OR[3] |= board_piece | empty_penalty
             
-            # Each piece is a bitmask of categories
-            # For pieces AND'd together, if they retain a one, that means that category is present in all 4 spots
-            # For pieces OR'd together, if they retain a zero, and they do not have any empty spaces, 
-            #   that means that category is present in all 4 spots
-            if (
-                (AND[0] != 0 or OR[0].bit_count() < 4)
-                or (AND[1] != 0 or OR[1].bit_count() < 4)
-                or (is_diagonal_same and (AND[2] != 0 or OR[2].bit_count() < 4))
-                or (is_diagonal_diff and (AND[3] != 0 or OR[3].bit_count() < 4))
-            ):
-                winner = Winner.PLAYER_1 if (PieceGive[PiecePlace(piece).name] & WHITE_PIECES) == 0 else Winner.PLAYER_2
-            elif state.remaining_pieces == 0:
-                winner = Winner.TIE
+    #         # Each piece is a bitmask of categories
+    #         # For pieces AND'd together, if they retain a one, that means that category is present in all 4 spots
+    #         # For pieces OR'd together, if they retain a zero, and they do not have any empty spaces, 
+    #         #   that means that category is present in all 4 spots
+    #         if (
+    #             (AND[0] != 0 or OR[0].bit_count() < 4)
+    #             or (AND[1] != 0 or OR[1].bit_count() < 4)
+    #             or (is_diagonal_same and (AND[2] != 0 or OR[2].bit_count() < 4))
+    #             or (is_diagonal_diff and (AND[3] != 0 or OR[3].bit_count() < 4))
+    #         ):
+    #             winner = Winner.PLAYER_1 if (PieceGive[PiecePlace(piece).name] & WHITE_PIECES) == 0 else Winner.PLAYER_2
+    #         elif state.remaining_pieces == 0:
+    #             winner = Winner.TIE
             
-        return winner
+    #     return winner
     
     def final_reward(self, is_p1: bool) -> float:
         rew: float = 0.0
@@ -222,3 +239,26 @@ class Model:
             -1.0
         
         return rew
+    
+    def _compute_lines(self) -> dict[int, list[tuple[int, ...]]]:
+        lines: dict[int, list[tuple[int, ...]]] = {} # empty mask, shift 0, shift 1, shift 2, shift 3
+        
+        for space in range(GRID_LEN * GRID_LEN):
+            r: int = int(space / GRID_LEN)
+            c: int = space % GRID_LEN
+            
+            # Row and column
+            lines[space] = [
+                (PIECE_MASK << (r * GRID_LEN), r * GRID_LEN, r * GRID_LEN + 1, r * GRID_LEN + 2, r * GRID_LEN + 3), # row
+                (1 << c | 1 << c << (GRID_LEN) | 1 << c << (2 * GRID_LEN) | 1 << c << (3 * GRID_LEN),
+                 c, c + GRID_LEN, c + 2 * GRID_LEN, c + 3 * GRID_LEN) # col
+            ]
+            
+            # Same diagonal
+            if r == c:
+                lines[space].append([0x8421, 0, GRID_LEN + 1, GRID_LEN * 2 + 2, GRID_LEN * 3 + 3])
+            # Opposite diagonal
+            if GRID_LEN - 1 - r == c:
+                lines[space].append([0x1248, GRID_LEN - 1, GRID_LEN * 2 - 2, GRID_LEN * 3 - 3, GRID_LEN * 4 - 4])
+    
+        return lines

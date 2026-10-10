@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import PieceGive, Winner
+from global_defs.state import *
 from model import Model
 from view import View
 from agent import Agent
@@ -20,12 +20,13 @@ class Controller:
             self.p2.update_stats(self.mdl)
             self.running = False
             return
-        elif self.mdl.state.given_piece == PieceGive.EMPTY:
+    
+        if self.mdl.is_give_phase(self.mdl.state):
             if self.mdl.is_p1_turn(self.mdl.state):
                 self.mdl.give_piece(self.mdl.state, self.p1.query_give_piece(self.mdl))
             else:
                 self.mdl.give_piece(self.mdl.state, self.p2.query_give_piece(self.mdl))
-        elif self.mdl.state.given_piece != PieceGive.EMPTY:
+        else:
             if self.mdl.is_p1_turn(self.mdl.state):
                 self.mdl.place_piece(self.mdl.state, self.p1.query_place_piece(self.mdl))
             else:

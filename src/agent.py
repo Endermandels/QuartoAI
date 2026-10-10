@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import State, Winner, Action, PiecePlace, PieceGive, GRID_LEN
+from global_defs.state import *
 from global_defs.stats import Stats
 from collections import defaultdict
 from model import Model
@@ -26,10 +26,10 @@ class Agent:
         self.is_p1: bool = is_p1
         self.stats: Stats = stats
 
-    def query_give_piece(self, mdl: Model) -> Action | None:
+    def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
         return None
 
-    def query_place_piece(self, mdl: Model) -> Action | None:
+    def query_place_piece(self, mdl: Model) -> tuple[int, ...] | None:
         return None
     
     def update_stats(self, mdl: Model) -> None:
@@ -48,27 +48,27 @@ class HumanAgent(Agent):
         super().__init__(is_p1, stats)
         self.vw: View = vw
     
-    def query_give_piece(self, mdl: Model) -> Action | None:
+    def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
         return self.vw.query_give_piece(mdl)
 
-    def query_place_piece(self, mdl: Model) -> Action | None:
+    def query_place_piece(self, mdl: Model) -> tuple[int, ...] | None:
         return self.vw.query_place_piece(mdl)
 
 class RandomAgent(Agent):
     def __init__(self, is_p1: bool, stats: Stats):
         super().__init__(is_p1, stats)
     
-    def query_give_piece(self, mdl: Model) -> Action | None:
-        return Action(piece=choice(mdl.legal_give_actions(mdl.state)))
+    def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
+        return (ACTION_SPACE_DEFAULT, choice(mdl.legal_give_actions(mdl.state)))
 
-    def query_place_piece(self, mdl: Model) -> Action | None:
-        return Action(space=choice(mdl.legal_place_actions(mdl.state)))
+    def query_place_piece(self, mdl: Model) -> tuple[int, ...] | None:
+        return (choice(mdl.legal_place_actions(mdl.state)), ACTION_PIECE_DEFAULT)
 
 class HeuristicAgent(Agent):
     def __init__(self, is_p1: bool, stats: Stats):
         super().__init__(is_p1, stats)
     
-    def query_give_piece(self, mdl: Model) -> Action | None:
+    def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
         # Never give a winning piece, if possible
         
         # For each piece left,
@@ -81,19 +81,20 @@ class HeuristicAgent(Agent):
         
         for piece in legal_pieces:
             bad_piece: bool = False
-            piece_place: int = PiecePlace[PieceGive(piece).name].value
+            temp_give: tuple[int, ...] = mdl.give_piece(mdl.state, (ACTION_SPACE_DEFAULT, piece), False)
             
             for space in range(GRID_LEN * GRID_LEN):
-                if mdl.check_winner(mdl.state, space, piece_place) == (Winner.PLAYER_2 if self.is_p1 else Winner.PLAYER_1):
+                temp_place: tuple[int, ...] = mdl.place_piece(temp_give, (space, ACTION_PIECE_DEFAULT), False)
+                if mdl.check_winner_fast(temp_place[STATE_BOARD_IDX], temp_place[STATE_EMPTY_IDX], space):
                     bad_piece = True
                     break
             
             if not bad_piece:
                 good_pieces.append(piece)
             
-        return Action(piece=choice(good_pieces if len(good_pieces) > 0 else legal_pieces)) 
+        return (ACTION_SPACE_DEFAULT, choice(good_pieces if len(good_pieces) > 0 else legal_pieces))
 
-    def query_place_piece(self, mdl: Model) -> Action | None:
+    def query_place_piece(self, mdl: Model) -> tuple[int, ...] | None:
         # Always place piece in a winning spot, if possible
         
         # For each place,
@@ -103,14 +104,15 @@ class HeuristicAgent(Agent):
         
         legal_spaces: list[int] = mdl.legal_place_actions(mdl.state)
         winning_space: int | None = None
-        piece_place: int = PiecePlace[PieceGive(mdl.state.given_piece).name].value
         
         for space in legal_spaces:
-            if mdl.check_winner(mdl.state, space, piece_place) == (Winner.PLAYER_1 if self.is_p1 else Winner.PLAYER_2):
+            temp_place: tuple[int, ...] = mdl.place_piece(mdl.state, (space, ACTION_PIECE_DEFAULT), False)
+            
+            if mdl.check_winner_fast(temp_place[STATE_BOARD_IDX], temp_place[STATE_EMPTY_IDX], space):
                 winning_space = space
                 break
         
-        return Action(space=(winning_space if winning_space != None else choice(legal_spaces)))
+        return (winning_space if winning_space != None else choice(legal_spaces), ACTION_PIECE_DEFAULT)
     
 class QLearnAgent(Agent):
     # store q values: {(state, action): -> q}
@@ -136,10 +138,11 @@ class QLearnAgent(Agent):
         self.gamma: int = gamma
         
         # Usefulness of each action at a given state
-        self.q_table: dict[State, Action] = defaultdict(float) # default q of 0; populate q as agent encounters state, action pairs
+        # default q of 0; populate q as agent encounters state, action pairs
+        self.q_table: dict[tuple[int, ...], tuple[int, ...]] = defaultdict(float) 
         
         # Remember previous move for updating
-        self.prev_move: tuple[State, Action] = (None, None)
+        self.prev_move: tuple[tuple[int, ...], tuple[int, ...]] = (None, None)
         
         # Debugging stats
         self.hit_rate = 0
@@ -156,39 +159,39 @@ class QLearnAgent(Agent):
         if self.epsilon > 0.05:
             self.epsilon = max(self.epsilon - self.epsilon_decay_rate, 0.05)
     
-    def _learn(self, state: State, action: Action, r: float, max_q: float) -> None:
+    def _learn(self, state: tuple[int, ...], action: tuple[int, ...], r: float, max_q: float) -> None:
         future_r: float = self.gamma * max_q
         self.q_table[state, action] += self.alpha * (r + future_r - self.q_table[state, action])
     
-    def _get_best_action_q(self, mdl: Model, legal_actions: list[Action]) -> tuple[float, Action]:
-        best_action: Action = legal_actions[0]
+    def _get_best_action_q(self, state: tuple[int, ...], legal_actions: list[tuple[int, ...]]) -> tuple[float, tuple[int, ...]]:
+        best_action: tuple[int, ...] = legal_actions[0]
         best_q: float = -9999999
                 
         for a in legal_actions:
             self.lookups += 1
-            if (mdl.state, a) in self.q_table:
+            if (state, a) in self.q_table:
                 self.hit_rate += 1
-            q = self.q_table[mdl.state, a]
+            q = self.q_table[state, a]
             if q > best_q:
                 best_q = q
                 best_action = a
         
         return best_q, best_action
 
-    def query_give_piece(self, mdl: Model) -> Action | None:
-        legal_actions: list[Action] = [Action(piece=p) for p in mdl.legal_give_actions(mdl.state)]
-        q, best_action = self._get_best_action_q(mdl, legal_actions)
-        action: Action = choice(legal_actions) if random() <= self.epsilon else best_action
+    def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
+        legal_actions: list[tuple[int, ...]] = [(ACTION_SPACE_DEFAULT, p) for p in mdl.legal_give_actions(mdl.state)]
+        q, best_action = self._get_best_action_q(mdl.state, legal_actions)
+        action: tuple[int, ...] = choice(legal_actions) if random() <= self.epsilon else best_action
         
         self._learn(self.prev_move[0], self.prev_move[1], 0, q)
         self.prev_move = (mdl.state, action)
 
         return action
     
-    def query_place_piece(self, mdl: Model) -> Action | None:
-        legal_actions: list[Action] = [Action(board_coords=s) for s in mdl.legal_place_actions(mdl.state)]
+    def query_place_piece(self, mdl: Model) -> tuple[int, ...] | None:
+        legal_actions: list[tuple[int, ...]] = [(s, ACTION_PIECE_DEFAULT) for s in mdl.legal_place_actions(mdl.state)]
         q, best_action = self._get_best_action_q(mdl, legal_actions)
-        action: Action = choice(legal_actions) if random() <= self.epsilon else best_action
+        action: tuple[int, ...] = choice(legal_actions) if random() <= self.epsilon else best_action
                 
         self._learn(self.prev_move[0], self.prev_move[1], 0, q)
         self.prev_move = (mdl.state, action)
