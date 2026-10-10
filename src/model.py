@@ -8,7 +8,6 @@ class Errors(StrEnum):
     BOARD_SPACE_OCCUPIED = "Board space occupied"
     COORDINATES_OUT_OF_BOUNDS = "Coordinates are out of bounds"
     
-    
 class Model:
     def __init__(self, start_state: tuple[int, ...] = None, keep_logs: bool = False):
         self.state: tuple[int, ...] = start_state
@@ -164,70 +163,8 @@ class Model:
                 is_win = True
                 break
         
-        if is_win:
-            pass
-        
         return is_win
-    
-    # def check_winner(self, state: tuple[int, ...], space: int, piece: int) -> Winner:
-    #     """ Check if placing given piece at given space results in a win """
-    #     winner: Winner = Winner.NONE
         
-    #     if (state.empty & (1 << space)) != 0:
-    #         r: int = int(space / GRID_LEN)
-    #         c: int = space % GRID_LEN
-    #         AND: tuple[int, ...] = [piece, piece, piece, piece]
-    #         OR: tuple[int, ...] = [piece, piece, piece, piece]
-    #         is_diagonal_same: bool = (r == c)
-    #         is_diagonal_diff: bool = (GRID_LEN - 1 - r == c)
-            
-    #         # Check win for this position's row, col (and potentially diagonal)
-    #         for i in range(GRID_LEN):
-    #             shift: int
-    #             board_piece: int 
-    #             empty_penalty: int
-    #             if i != c:
-    #                 shift = ((GRID_LEN * r) + i)
-    #                 board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-    #                 empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-    #                 AND[0] &= board_piece
-    #                 OR[0] |= board_piece | empty_penalty # if empty space, board_piece will be 0, which is a valid piece
-    #             if i != r:
-    #                 shift = ((GRID_LEN * i) + c)
-    #                 board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-    #                 empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-    #                 AND[1] &= board_piece
-    #                 OR[1] |= board_piece | empty_penalty
-                
-    #                 if is_diagonal_same:
-    #                     shift = ((GRID_LEN * i) + i)
-    #                     board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-    #                     empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-    #                     AND[2] &= board_piece
-    #                     OR[2] |= board_piece | empty_penalty
-    #                 elif is_diagonal_diff:
-    #                     shift = ((GRID_LEN * i) + (GRID_LEN - 1 - i))
-    #                     board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
-    #                     empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
-    #                     AND[3] &= board_piece
-    #                     OR[3] |= board_piece | empty_penalty
-            
-    #         # Each piece is a bitmask of categories
-    #         # For pieces AND'd together, if they retain a one, that means that category is present in all 4 spots
-    #         # For pieces OR'd together, if they retain a zero, and they do not have any empty spaces, 
-    #         #   that means that category is present in all 4 spots
-    #         if (
-    #             (AND[0] != 0 or OR[0].bit_count() < 4)
-    #             or (AND[1] != 0 or OR[1].bit_count() < 4)
-    #             or (is_diagonal_same and (AND[2] != 0 or OR[2].bit_count() < 4))
-    #             or (is_diagonal_diff and (AND[3] != 0 or OR[3].bit_count() < 4))
-    #         ):
-    #             winner = Winner.PLAYER_1 if (PieceGive[PiecePlace(piece).name] & WHITE_PIECES) == 0 else Winner.PLAYER_2
-    #         elif state.remaining_pieces == 0:
-    #             winner = Winner.TIE
-            
-    #     return winner
-    
     def final_reward(self, is_p1: bool) -> float:
         rew: float = 0.0
         
@@ -239,6 +176,15 @@ class Model:
             -1.0
         
         return rew
+    
+    def reset(self) -> None:
+        self.state = (
+            STATE_BOARD_DEFAULT,
+            STATE_EMPTY_DEFAULT,
+            STATE_REMAINING_DEFAULT,
+            STATE_GIVEN_DEFAULT,
+        )
+        self.winner: Winner = Winner.NONE
     
     def _compute_lines(self) -> dict[int, list[tuple[int, ...]]]:
         lines: dict[int, list[tuple[int, ...]]] = {} # empty mask, shift 0, shift 1, shift 2, shift 3

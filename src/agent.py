@@ -1,6 +1,6 @@
 from __future__ import annotations
 from global_defs.state import *
-from global_defs.stats import Stats
+from global_defs.stats import Stats, QLearnStats
 from collections import defaultdict
 from model import Model
 from view import View
@@ -124,8 +124,15 @@ class QLearnAgent(Agent):
     # where Q(s', a') is the q value of the next state given the next action
     # the update rule uses back propogation, so the next state is actually the current state
     
-    def __init__(self, is_p1, stats, epsilon: int = 0.7, alpha: int = 0.1, gamma: int = 1.0, epsilon_decay_rate: float = 0):
+    def __init__(self
+                 , is_p1: bool
+                 , stats: QLearnStats
+                 , epsilon: int = 0.7
+                 , alpha: int = 0.1
+                 , gamma: int = 1.0
+                 , epsilon_decay_rate: float = 0):
         super().__init__(is_p1, stats)
+        self.stats: QLearnStats
         
         # Exploration rate of making random moves
         self.epsilon: int = epsilon
@@ -144,10 +151,6 @@ class QLearnAgent(Agent):
         # Remember previous move for updating
         self.prev_move: tuple[tuple[int, ...], tuple[int, ...]] = (None, None)
         
-        # Debugging stats
-        self.hit_rate = 0
-        self.lookups = 0
-    
     def update_stats(self, mdl: Model) -> None:
         """ Called at the end of the game """
         super().update_stats(mdl)
@@ -168,9 +171,9 @@ class QLearnAgent(Agent):
         best_q: float = -9999999
                 
         for a in legal_actions:
-            self.lookups += 1
+            self.stats.q_table_lookups += 1
             if (state, a) in self.q_table:
-                self.hit_rate += 1
+                self.stats.q_table_hits += 1
             q = self.q_table[state, a]
             if q > best_q:
                 best_q = q

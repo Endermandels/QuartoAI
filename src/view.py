@@ -125,11 +125,7 @@ class TerminalView(View):
 
     def display_stats(self, stats: Stats) -> None:
         self._print("-----------------------------------------------------")
-        self._print(f">>> Agent: \t\t{stats.agent_name}")
-        self._print(f">>> Games Won: \t\t{stats.games_won}")
-        self._print(f">>> Games Lost: \t{stats.games_lost}")
-        self._print(f">>> Games Tied: \t{stats.games_tied}")
-        self._print(f">>> Games Played: \t{stats.games_played}")
+        self._print(stats)
     
     def update(self, mdl: Model) -> None:
         while len(mdl.error_log) > 0:

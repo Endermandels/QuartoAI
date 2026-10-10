@@ -6,19 +6,22 @@ from agent import Agent
 from time import perf_counter
 
 class Controller:
-    def __init__(self, mdl: Model, vw: View, p1: Agent, p2: Agent):
+    def __init__(self, mdl: Model, vw: View, p1: Agent, p2: Agent, runs: int):
+        self.RUNS: int = runs
         self.running: bool = False
         self.mdl: Model = mdl
         self.vw: View = vw
         self.p1: Agent = p1
         self.p2: Agent = p2
+        self.n_runs: int = 0
 
     def update(self) -> None:
         if self.mdl.winner != Winner.NONE:
             self.vw.display_winner(self.mdl)
             self.p1.update_stats(self.mdl)
             self.p2.update_stats(self.mdl)
-            self.running = False
+            self.mdl.reset()
+            self.n_runs += 1
             return
     
         if self.mdl.is_give_phase(self.mdl.state):
@@ -42,7 +45,7 @@ class Controller:
         # start_time: float = perf_counter()
         self.running = True
         
-        while (self.running):
+        while self.running and self.n_runs < self.RUNS:
             self.update()
             
             # # Catch unusually long hangs
