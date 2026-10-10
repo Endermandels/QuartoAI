@@ -3,7 +3,6 @@ from typing import NamedTuple
 
 class PiecePlace(IntEnum):
     """ Defines pieces based on category: b3 = white/black, b2 = tall/short, b1 = square/circle, b0 = hole/solid """
-    EMPTY = 0x10
     WHITE_TALL_SQUARE_HOLE = 0x0
     WHITE_TALL_SQUARE_SOLID = 0x1
     WHITE_TALL_CIRCLE_HOLE = 0x2
@@ -69,12 +68,17 @@ class Winner(IntEnum):
     PLAYER_2 = 2
     TIE = 3
 
+ALL_EMPTY = 0xFFFF
+GRID_LEN = 4
+PIECE_SIZE = 4 # number of bits per piece
+PIECE_MASK = 0xF
+
 class State(NamedTuple):
-    board: tuple[tuple[int, ...], ...]
-    remaining_pieces: int   # Each bit represents having a piece (1) or not having a piece (0)
-                            # P1 has white pieces, P2 has black pieces
-    given_piece: int # The piece given to the opposite player of the player whose turn it is
+    board: int # each nibble is a space (16 spaces, 4 bits per space, 64 bits total)
+    empty: int # each bit is an empty space on board (16 spaces, 1 bit per space, 16 bits total)
+    remaining_pieces: int   # each bit is a remaining piece (16 pieces, 1 bit per piece, 16 bits total)
+    given_piece: int # The piece given to the opposite player of the player whose turn it is (4 bits)
 
 class Action(NamedTuple):
-    board_coords: tuple[int, int] = (-1, -1)
+    space: int = 0x10 # each value is a space (16 spaces, 16 values), 0x10 = Empty
     piece: int = PieceGive.EMPTY.value

@@ -44,7 +44,7 @@ class Controller:
         while (self.running):
             self.update()
             
-            # Catch unusually long hangs
+            # # Catch unusually long hangs
             # if perf_counter() - start_time > 5:
             #     print("Hung up")
             #     self.running = False

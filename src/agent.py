@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import State, Winner, Action, PiecePlace, PieceGive
+from global_defs.state import State, Winner, Action, PiecePlace, PieceGive, GRID_LEN
 from global_defs.stats import Stats
 from collections import defaultdict
 from model import Model
@@ -62,7 +62,7 @@ class RandomAgent(Agent):
         return Action(piece=choice(mdl.legal_give_actions(mdl.state)))
 
     def query_place_piece(self, mdl: Model) -> Action | None:
-        return Action(board_coords=choice(mdl.legal_place_actions(mdl.state)))
+        return Action(space=choice(mdl.legal_place_actions(mdl.state)))
 
 class HeuristicAgent(Agent):
     def __init__(self, is_p1: bool, stats: Stats):
@@ -83,11 +83,10 @@ class HeuristicAgent(Agent):
             bad_piece: bool = False
             piece_place: int = PiecePlace[PieceGive(piece).name].value
             
-            for r in range(len(mdl.state.board)):
-                for c in range(len(mdl.state.board[r])):
-                    if mdl.check_winner(mdl.state, r, c, piece_place) == (Winner.PLAYER_2 if self.is_p1 else Winner.PLAYER_1):
-                        bad_piece = True
-                        break
+            for space in range(GRID_LEN * GRID_LEN):
+                if mdl.check_winner(mdl.state, space, piece_place) == (Winner.PLAYER_2 if self.is_p1 else Winner.PLAYER_1):
+                    bad_piece = True
+                    break
             
             if not bad_piece:
                 good_pieces.append(piece)
@@ -102,16 +101,16 @@ class HeuristicAgent(Agent):
         #  if there are any spots, place it there
         # Otherwise, place it randomly
         
-        legal_spaces: list[tuple[int, int]] = mdl.legal_place_actions(mdl.state)
-        winning_space: tuple[int, int] | None = None
+        legal_spaces: list[int] = mdl.legal_place_actions(mdl.state)
+        winning_space: int | None = None
         piece_place: int = PiecePlace[PieceGive(mdl.state.given_piece).name].value
         
         for space in legal_spaces:
-            if mdl.check_winner(mdl.state, space[0], space[1], piece_place) == (Winner.PLAYER_1 if self.is_p1 else Winner.PLAYER_2):
+            if mdl.check_winner(mdl.state, space, piece_place) == (Winner.PLAYER_1 if self.is_p1 else Winner.PLAYER_2):
                 winning_space = space
                 break
         
-        return Action(board_coords=(winning_space if winning_space != None else choice(legal_spaces)))
+        return Action(space=(winning_space if winning_space != None else choice(legal_spaces)))
     
 class QLearnAgent(Agent):
     # store q values: {(state, action): -> q}

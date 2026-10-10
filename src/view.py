@@ -1,5 +1,5 @@
 from __future__ import annotations
-from global_defs.state import Action, PiecePlace, PieceGive, Winner
+from global_defs.state import Action, PiecePlace, PieceGive, Winner, State, GRID_LEN, PIECE_SIZE, PIECE_MASK
 from global_defs.stats import Stats
 from model import Model
 
@@ -57,7 +57,7 @@ class TerminalView(View):
         if inp in ["q", "quit"]:
             self.quit_input = True
         elif inp in ["p", "print"]:
-            self._print_board(mdl.state.board)
+            self._print_board(mdl.state)
         elif len(inp) == 3:
             piece_name: str = ""
             valid_piece: bool = True
@@ -108,9 +108,9 @@ class TerminalView(View):
         if inp in ["q", "quit"]:
             self.quit_input = True
         elif inp in ["p", "print"]:
-            self._print_board(mdl.state.board)
+            self._print_board(mdl.state)
         elif len(inp_split) == 2 and all([s.isdigit() for s in inp_split]):
-            action = Action(board_coords=(int(inp_split[0]), int(inp_split[1])))
+            action = Action(space=(int(inp_split[0]) * GRID_LEN) + int(inp_split[1]))
         else:
             self._warn(f"! Unknown input: {inp}")
         
@@ -121,7 +121,7 @@ class TerminalView(View):
             self._print(f"* Tie!", BColors.YELLOW, True)
         else:
             self._print(f"* {mdl.winner.name} Won!", BColors.GREEN, True)
-        self._print_board(mdl.state.board)
+        self._print_board(mdl.state)
 
     def display_stats(self, stats: Stats) -> None:
         self._print("-----------------------------------------------------")
@@ -149,12 +149,23 @@ class TerminalView(View):
         """ Print an error string """
         print(f"{BColors.BOLD}{ERROR_COL}{string}{BColors.ENDC}")
         
-    def _print_board(self, board: tuple[tuple[int, ...], ...]) -> None:
+    def _print_board(self, state: State) -> None:
         """ Prints the given board """
-        for row in board:
-            print("| ", end="")
-            for piece in row:
-                # Represent each piece by the first letter of each category (i.e. BTSH for BLACK_TALL_SQUARE_HOLE)
-                piece_repr: str = "".join([s[0] for s in PiecePlace(piece).name.split("_")])
-                print(f"{piece_repr}\t| ", end="")
-            print()
+        for space in range(GRID_LEN * GRID_LEN):
+            piece_repr: str 
+            
+            if space % GRID_LEN == 0:
+                print("| ", end="")
+            
+            # Represent each piece by the first letter of each category (i.e. BTSH for BLACK_TALL_SQUARE_HOLE)
+            if state.empty & (1 << space) != 0:
+                piece_repr = "E"
+            else:
+                piece_repr = "".join( \
+                    [s[0] for s in PiecePlace((state.board >> (space * PIECE_SIZE)) & PIECE_MASK).name.split("_")] \
+                )
+            
+            print(f"{piece_repr}\t| ", end="")
+            
+            if space % GRID_LEN == GRID_LEN - 1:
+                print()

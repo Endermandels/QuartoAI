@@ -1,5 +1,8 @@
 from __future__ import annotations
-from global_defs.state import PiecePlace, PieceGive, Action, State, Winner, WHITE_PIECES, BLACK_PIECES
+from global_defs.state import (
+    PiecePlace, PieceGive, Action, State, Winner, 
+    WHITE_PIECES, BLACK_PIECES, ALL_EMPTY, GRID_LEN, PIECE_SIZE, PIECE_MASK
+)
 from enum import StrEnum
 
 class Errors(StrEnum):
@@ -17,12 +20,8 @@ class Model:
         # Default State
         if self.state == None:
             self.state = State(
-                (
-                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
-                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
-                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
-                    (PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value, PiecePlace.EMPTY.value),
-                ),
+                0,
+                ALL_EMPTY,
                 WHITE_PIECES | BLACK_PIECES,
                 PieceGive.EMPTY.value,
             )
@@ -68,14 +67,11 @@ class Model:
             return is_legal
         
         # Check that the specified coordinates are within the board
-        if (
-            0 <= action.board_coords[0] and action.board_coords[0] < len(state.board)
-            and 0 <= action.board_coords[1] and action.board_coords[1] < len(state.board[0])
-        ):
+        if 0 <= action.space and action.space < GRID_LEN * GRID_LEN:
             is_legal = True
             
             # Check that the board space specified is EMPTY
-            if state.board[action.board_coords[0]][action.board_coords[1]] != PiecePlace.EMPTY:
+            if ((state.empty >> action.space) & 1) != 1:
                 is_legal = False
                 self.error_log.append(Errors.BOARD_SPACE_OCCUPIED)
         else:
@@ -96,14 +92,13 @@ class Model:
                 
         return actions
 
-    def legal_place_actions(self, state: State) -> list[tuple[int, int]]:
-        """ Return a list of coordinates of empty spots on the board """
-        actions: list[tuple[int, int]] = []
+    def legal_place_actions(self, state: State) -> list[int]:
+        """ Return a list of empty spaces on the board """
+        actions: list[int] = []
         
-        for r in range(len(state.board)):
-            for c in range(len(state.board[r])):
-                if state.board[r][c] == PiecePlace.EMPTY:
-                    actions.append((r, c))
+        for i in range(GRID_LEN * GRID_LEN):
+            if ((state.empty >> i) & 1) == 1:
+                actions.append(i)
             
         return actions
     
@@ -120,6 +115,7 @@ class Model:
         given_piece = action.piece
         new_state = State(
             state.board,
+            state.empty,
             new_remaining_pieces,
             given_piece,
         )
@@ -132,79 +128,82 @@ class Model:
     
     def place_piece(self, state: State, action: Action, update_state: bool = True) -> State:
         """ Opposite player places the given piece """
-        new_board: tuple[tuple[int, ...], ...]
-        new_row: tuple[int, ...]
-        action_row: int
-        action_col: int
         piece_place: int
         new_state: State
         
         if not self.is_legal_place_piece(state, action):
             return state
         
-        action_row = action.board_coords[0]
-        action_col = action.board_coords[1]
         piece_place = PiecePlace[PieceGive(state.given_piece).name].value
         
-        new_row = (
-            state.board[action_row][:action_col] 
-            + (piece_place, )
-            + state.board[action_row][action_col + 1:]
-        )
-        new_board = (
-            state.board[:action_row] 
-            + (new_row, ) 
-            + state.board[action_row + 1:]
-        )
         new_state = State(
-            new_board,
+            state.board | (piece_place << (action.space * PIECE_SIZE)),
+            state.empty & (~(1 << action.space)), # Clear empty space
             state.remaining_pieces,
             PieceGive.EMPTY.value, # Reset given_piece
         )
         
         if update_state:
             self.move_log.append(f"{"P1" if self.is_p1_turn(self.state) else "P2"} " \
-                                f"placed {PieceGive(self.state.given_piece).name} at ({action_row}, {action_col})")
-            self.winner = self.check_winner(self.state, action_row, action_col, piece_place)
+                                f"placed {PieceGive(self.state.given_piece).name} at " \
+                                f"({int(action.space / GRID_LEN)}, {action.space % GRID_LEN})")
+            self.winner = self.check_winner(self.state, action.space, piece_place)
             self.state = new_state
         
         return new_state
     
-    def check_winner(self, state: State, r: int, c: int, piece: int) -> Winner:
-        """ Check if placing given piece at (r, c) results in a win """
+    def check_winner(self, state: State, space: int, piece: int) -> Winner:
+        """ Check if placing given piece at given space results in a win """
         winner: Winner = Winner.NONE
         
-        if state.board[r][c] == PiecePlace.EMPTY:
+        if (state.empty & (1 << space)) != 0:
+            r: int = int(space / GRID_LEN)
+            c: int = space % GRID_LEN
             AND: tuple[int, ...] = [piece, piece, piece, piece]
             OR: tuple[int, ...] = [piece, piece, piece, piece]
             is_diagonal_same: bool = (r == c)
-            is_diagonal_diff: bool = (len(state.board) - 1 - r == c)
+            is_diagonal_diff: bool = (GRID_LEN - 1 - r == c)
             
             # Check win for this position's row, col (and potentially diagonal)
-            for i in range(len(state.board[r])):
+            for i in range(GRID_LEN):
+                shift: int
+                board_piece: int 
+                empty_penalty: int
                 if i != c:
-                    AND[0] &= state.board[r][i]
-                    OR[0] |= state.board[r][i]
+                    shift = ((GRID_LEN * r) + i)
+                    board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+                    empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+                    AND[0] &= board_piece
+                    OR[0] |= board_piece | empty_penalty # if empty space, board_piece will be 0, which is a valid piece
                 if i != r:
-                    AND[1] &= state.board[i][c]
-                    OR[1] |= state.board[i][c]
+                    shift = ((GRID_LEN * i) + c)
+                    board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+                    empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+                    AND[1] &= board_piece
+                    OR[1] |= board_piece | empty_penalty
                 
                     if is_diagonal_same:
-                        AND[2] &= state.board[i][i]
-                        OR[2] |= state.board[i][i]
+                        shift = ((GRID_LEN * i) + i)
+                        board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+                        empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+                        AND[2] &= board_piece
+                        OR[2] |= board_piece | empty_penalty
                     elif is_diagonal_diff:
-                        AND[3] &= state.board[i][len(state.board) - 1 - i]
-                        OR[3] |= state.board[i][len(state.board) - 1 - i]
+                        shift = ((GRID_LEN * i) + (GRID_LEN - 1 - i))
+                        board_piece = ((state.board >> (shift * PIECE_SIZE)) & PIECE_MASK)
+                        empty_penalty = 0xF if (state.empty & (1 << shift)) != 0 else 0x0
+                        AND[3] &= board_piece
+                        OR[3] |= board_piece | empty_penalty
             
             # Each piece is a bitmask of categories
             # For pieces AND'd together, if they retain a one, that means that category is present in all 4 spots
             # For pieces OR'd together, if they retain a zero, and they do not have any empty spaces, 
             #   that means that category is present in all 4 spots
             if (
-                (AND[0] != 0 or ((OR[0] & PiecePlace.EMPTY) == 0 and OR[0].bit_count() < 4))
-                or (AND[1] != 0 or ((OR[1] & PiecePlace.EMPTY) == 0 and OR[1].bit_count() < 4))
-                or (is_diagonal_same and (AND[2] != 0 or ((OR[2] & PiecePlace.EMPTY) == 0 and OR[2].bit_count() < 4)))
-                or (is_diagonal_diff and (AND[3] != 0 or ((OR[3] & PiecePlace.EMPTY) == 0 and OR[3].bit_count() < 4)))
+                (AND[0] != 0 or OR[0].bit_count() < 4)
+                or (AND[1] != 0 or OR[1].bit_count() < 4)
+                or (is_diagonal_same and (AND[2] != 0 or OR[2].bit_count() < 4))
+                or (is_diagonal_diff and (AND[3] != 0 or OR[3].bit_count() < 4))
             ):
                 winner = Winner.PLAYER_1 if (PieceGive[PiecePlace(piece).name] & WHITE_PIECES) == 0 else Winner.PLAYER_2
             elif state.remaining_pieces == 0:
