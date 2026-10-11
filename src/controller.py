@@ -4,16 +4,18 @@ from model import Model
 from view import View
 from agent import Agent
 from time import perf_counter
+from random import random
 
 class Controller:
-    def __init__(self, mdl: Model, vw: View, p1: Agent, p2: Agent, runs: int):
-        self.RUNS: int = runs
+    def __init__(self, mdl: Model, vw: View, p1: Agent, p2: Agent, ngames: int):
+        self.NGAMES: int = ngames
         self.running: bool = False
         self.mdl: Model = mdl
         self.vw: View = vw
         self.p1: Agent = p1
         self.p2: Agent = p2
-        self.n_runs: int = 0
+        self.ngames: int = 0
+        self.CHANCE_TO_SWITCH_PLAYERS = 0.5
 
     def update(self) -> None:
         if self.mdl.winner != Winner.NONE:
@@ -21,7 +23,9 @@ class Controller:
             self.p1.update_stats(self.mdl)
             self.p2.update_stats(self.mdl)
             self.mdl.reset()
-            self.n_runs += 1
+            self.ngames += 1
+            if random() < self.CHANCE_TO_SWITCH_PLAYERS:
+                self._switch_players()
             return
     
         if self.mdl.is_give_phase(self.mdl.state):
@@ -45,10 +49,17 @@ class Controller:
         # start_time: float = perf_counter()
         self.running = True
         
-        while self.running and self.n_runs < self.RUNS:
+        while self.running and self.ngames < self.NGAMES:
             self.update()
             
             # # Catch unusually long hangs
             # if perf_counter() - start_time > 5:
             #     print("Hung up")
             #     self.running = False
+    
+    def _switch_players(self) -> None:
+        temp: Agent = self.p1
+        self.p1 = self.p2
+        self.p2 = temp
+        self.p1.set_player(True)
+        self.p2.set_player(False)

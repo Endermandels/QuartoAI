@@ -5,7 +5,8 @@ from collections import defaultdict
 from model import Model
 from view import View
 from random import choice, random
-import math
+from time import perf_counter
+import pickle
 
 """
 - **Goal:** learn Q(s,a), the expected total future reward of taking action a in state s and then playing well afterward.
@@ -22,9 +23,14 @@ import math
 """
 
 class Agent:
-    def __init__(self, is_p1: bool, stats: Stats):
-        self.is_p1: bool = is_p1
-        self.stats: Stats = stats
+    def __init__(self, stats: Stats):
+        self.is_p1: bool = True
+        self.START_STATS: Stats = stats
+        self.stats: Stats
+        self.clear_stats()
+
+    def set_player(self, is_p1: bool) -> None:
+        self.is_p1 = is_p1
 
     def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
         return None
@@ -42,10 +48,13 @@ class Agent:
             self.stats.games_tied += 1
             
         self.stats.games_played += 1
+    
+    def clear_stats(self) -> None:
+        self.stats = self.START_STATS.duplicate()
 
 class HumanAgent(Agent):
-    def __init__(self, is_p1: bool, stats: Stats, vw: View):
-        super().__init__(is_p1, stats)
+    def __init__(self, stats: Stats, vw: View):
+        super().__init__(stats)
         self.vw: View = vw
     
     def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
@@ -55,8 +64,8 @@ class HumanAgent(Agent):
         return self.vw.query_place_piece(mdl)
 
 class RandomAgent(Agent):
-    def __init__(self, is_p1: bool, stats: Stats):
-        super().__init__(is_p1, stats)
+    def __init__(self, stats: Stats):
+        super().__init__(stats)
     
     def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
         return (ACTION_SPACE_DEFAULT, choice(mdl.legal_give_actions(mdl.state)))
@@ -65,8 +74,8 @@ class RandomAgent(Agent):
         return (choice(mdl.legal_place_actions(mdl.state)), ACTION_PIECE_DEFAULT)
 
 class HeuristicAgent(Agent):
-    def __init__(self, is_p1: bool, stats: Stats):
-        super().__init__(is_p1, stats)
+    def __init__(self, stats: Stats):
+        super().__init__(stats)
     
     def query_give_piece(self, mdl: Model) -> tuple[int, ...] | None:
         # Never give a winning piece, if possible
@@ -125,18 +134,22 @@ class QLearnAgent(Agent):
     # the update rule uses back propogation, so the next state is actually the current state
     
     def __init__(self
-                 , is_p1: bool
                  , stats: QLearnStats
-                 , epsilon: int = 0.7
+                 , epsilon: int = 1.0
                  , alpha: int = 0.1
                  , gamma: int = 1.0
-                 , epsilon_decay_rate: float = 0):
-        super().__init__(is_p1, stats)
+                 , epsilon_decay_rate: float = 0.7
+                 , n_games: int = 1
+                 , save_file: str = ""
+                 , load_file: str = ""):
+        super().__init__(stats)
         self.stats: QLearnStats
         
         # Exploration rate of making random moves
         self.epsilon: int = epsilon
         self.epsilon_decay_rate: float = epsilon_decay_rate
+        self.epsilon_lowest_value: float = 0.05
+        self.n_games: int = n_games
 
         # Learning rate of q values
         self.alpha: int = alpha
@@ -151,6 +164,10 @@ class QLearnAgent(Agent):
         # Remember previous move for updating
         self.prev_move: tuple[tuple[int, ...], tuple[int, ...]] = (None, None)
         
+        # Save/Load q_table files
+        self.load_file: str = load_file
+        self.save_file: str = save_file
+        
     def update_stats(self, mdl: Model) -> None:
         """ Called at the end of the game """
         super().update_stats(mdl)
@@ -159,8 +176,8 @@ class QLearnAgent(Agent):
         self._decay_epsilon()
     
     def _decay_epsilon(self) -> float:
-        if self.epsilon > 0.05:
-            self.epsilon = max(self.epsilon - self.epsilon_decay_rate, 0.05)
+        if self.epsilon > self.epsilon_lowest_value:
+            self.epsilon = max(self.epsilon - (1 / (self.epsilon_decay_rate * self.n_games)), self.epsilon_lowest_value)
     
     def _learn(self, state: tuple[int, ...], action: tuple[int, ...], r: float, max_q: float) -> None:
         future_r: float = self.gamma * max_q
@@ -200,3 +217,31 @@ class QLearnAgent(Agent):
         self.prev_move = (mdl.state, action)
 
         return action
+    
+    def load_q_table(self) -> bool:
+        """ Load the saved q_table from load_file. Returns True on success and False otherwise. """
+        if self.load_file != "":
+            try:
+                start_time = perf_counter()
+                with open(f"agents/{self.load_file}", "rb") as file:
+                    self.q_table = pickle.load(file)
+                end_time = perf_counter()
+                print(f"* Load time: {(end_time - start_time):.6f} seconds")
+                return True
+            except OSError as e:
+                print(f"! Error reading from {self.load_file}: {e}")
+                return False
+    
+    def save_q_table(self) -> bool:
+        """ Load the saved q_table from load_file. Returns True on success and False otherwise. """
+        if self.save_file != "":
+            try:
+                start_time = perf_counter()
+                with open(f"agents/{self.save_file}", "wb") as file:
+                    self.q_table = pickle.dump(self.q_table, file)
+                end_time = perf_counter()
+                print(f"* Save time: {(end_time - start_time):.6f} seconds")
+                return True
+            except OSError as e:
+                print(f"! Error reading from {self.save_file}: {e}")
+                return False
