@@ -1,11 +1,10 @@
 from global_defs.stats import Stats, QLearnStats
+from view import View, TerminalView
 from controller import Controller
-from view import View, TerminalView, BColors
 from model import Model
 from agent import *
 from time import perf_counter
-from datetime import datetime
-import cProfile, pstats
+# import cProfile, pstats
 
 RUNS: int = 1000
 
@@ -18,51 +17,41 @@ def run(vw: View
     start_time: float
     end_time: float
     
+    if type(a1) == QLearnAgent:
+        if a1.load_q_table() == False:
+            print("! Aborting run")
+            return
+    if type(a2) == QLearnAgent:
+        if a2.load_q_table() == False:
+            print("! Aborting run")
+            return
+    
     start_time = perf_counter()
+
     mdl = Model(keep_logs=not headless)
     ctrl = Controller(mdl, vw if headless else vwt, a1, a2, ngames)
-    ctrl.run()
+    try:
+        ctrl.run()
+    except KeyboardInterrupt:
+        print("* Quitting early")
+        
     end_time = perf_counter()
     print(f"Runtime: {(end_time - start_time):.6f} seconds")
     
     vwt.display_stats(a1.stats)
     vwt.display_stats(a2.stats)
     
-def _get_agent_from_input(self, inp: str, is_p1: bool) -> Agent | None:
-    def is_float(f) -> bool:
-        try:
-            float(f)
-        except:
-            return None
-        return True
+    if type(a1) == QLearnAgent:
+        a1.save_q_table()
+    if type(a2) == QLearnAgent:
+        a2.save_q_table()
     
-    agent: Agent = None
-    
-    if inp == "h":
-        agent = HumanAgent(is_p1, Stats("Human"), self)
-    elif inp == "r":
-        agent = RandomAgent(is_p1, Stats("Random"))
-    elif inp == "h":
-        agent = HeuristicAgent(is_p1, Stats("Heuristic"))
-    elif inp == "q":
-        # Ask for more detail
-        epsilon: float = 1.0
-        alpha: float = 0.1
-        gamma: float = 1.0
-        
-        self._print("? Input: '[e=1.0],[a=0.1],[y=1.0],[e_decay=0.7]'", BColors.CYAN)
-        inp = input("> ").strip().lower()
-        
-        if len(inp) > 0 and is_float(inp[0]):
-            epsilon = float(inp[0])
-        if len(inp) > 1 and is_float(inp[1]):
-            alpha = float(inp[1])
-        if len(inp) > 2 and is_float(inp[2]):
-            gamma = float(inp[2])
-        
-        agent = QLearnAgent(is_p1, QLearnStats("QLearn"), epsilon, alpha, gamma)
-    
-    return agent
+def is_float(f: str) -> bool:
+    try:
+        float(f)
+    except:
+        return None
+    return True
 
 def main() -> None:
     vw: View = View()
@@ -94,15 +83,6 @@ def main() -> None:
     headless: bool = True
     inp: str
     
-    # Set agents
-    # Set runs
-    # Set hyperparameters
-    # Set headless mode
-    # Set q table save file
-    # Set q table load file
-    # Run games
-    # Interrupt games
-            
     while running:
         print(f"? Input:")
         inp: str = input("> ").strip().lower()
@@ -112,7 +92,7 @@ def main() -> None:
             running = False
         elif inp == "r":
             run(vw, vwt, a1, a2, ngames, headless)
-        # TODO: Add profiling in, maybe?
+        # TODO: Add profiling, maybe?
         # elif inp == "prf":
         #     cProfile.run(f"run({vw}, {vwt}, {a1}, {a2}, {ngames}, {headless})", "prof.out")
         #     pstats.Stats("prof.out").sort_stats("tottime").print_stats(10)
@@ -135,12 +115,68 @@ def main() -> None:
         elif inp == "pa2":
             print(a2.stats)
         
-        # Hyperparameters
+        # Q-Learn Agents
+        elif inp.startswith("q1e=") and type(a1) is QLearnAgent and is_float(inp[4:]):
+            a1.epsilon = float(inp[4:])
+            print(f">>> Epsilon: {a1.epsilon}")
+        elif inp.startswith("q1a=") and type(a1) is QLearnAgent and is_float(inp[4:]):
+            a1.alpha = float(inp[4:])
+            print(f">>> Alpha: {a1.alpha}")
+        elif inp.startswith("q1y=") and type(a1) is QLearnAgent and is_float(inp[4:]):
+            a1.gamma = float(inp[4:])
+            print(f">>> Gamma: {a1.gamma}")
+        elif inp.startswith("q1ed=") and type(a1) is QLearnAgent and is_float(inp[5:]):
+            a1.epsilon_decay_rate = float(inp[5:])
+            print(f">>> Epsilon Decay: {a1.epsilon_decay_rate}")
+        elif inp.startswith("q1sv=") and type(a1) is QLearnAgent:
+            a1.save_file = inp[5:]
+            print(f">>> Save File: '{a1.save_file}'")
+        elif inp.startswith("q1ld=") and type(a1) is QLearnAgent:
+            a1.load_file = inp[5:]
+            print(f">>> Load File: '{a1.load_file}'")
+        elif inp == "pq1" and type(a1) is QLearnAgent:
+            print(f">>> Epsilon: {a1.epsilon}")
+            print(f">>> Alpha: {a1.alpha}")
+            print(f">>> Gamma: {a1.gamma}")
+            print(f">>> Epsilon Decay: {a1.epsilon_decay_rate}")
+            print(f">>> Save File: '{a1.save_file}'")
+            print(f">>> Load File: '{a1.load_file}'")
+        
+        elif inp.startswith("q2e=") and type(a2) is QLearnAgent and is_float(inp[4:]):
+            a2.epsilon = float(inp[4:])
+            print(f">>> Epsilon: {a2.epsilon}")
+        elif inp.startswith("q2a=") and type(a2) is QLearnAgent and is_float(inp[4:]):
+            a2.alpha = float(inp[4:])
+            print(f">>> Alpha: {a2.alpha}")
+        elif inp.startswith("q2y=") and type(a2) is QLearnAgent and is_float(inp[4:]):
+            a2.gamma = float(inp[4:])
+            print(f">>> Gamma: {a2.gamma}")
+        elif inp.startswith("q2ed=") and type(a2) is QLearnAgent and is_float(inp[5:]):
+            a2.epsilon_decay_rate = float(inp[5:])
+            print(f">>> Epsilon Decay: {a2.epsilon_decay_rate}")
+        elif inp.startswith("q2sv=") and type(a2) is QLearnAgent:
+            a2.save_file = inp[5:]
+            print(f">>> Save File: '{a2.save_file}'")
+        elif inp.startswith("q2ld=") and type(a2) is QLearnAgent:
+            a2.load_file = inp[5:]
+            print(f">>> Load File: '{a2.load_file}'")
+        elif inp == "pq2" and type(a2) is QLearnAgent:
+            print(f">>> Epsilon: {a2.epsilon}")
+            print(f">>> Alpha: {a2.alpha}")
+            print(f">>> Gamma: {a2.gamma}")
+            print(f">>> Epsilon Decay: {a2.epsilon_decay_rate}")
+            print(f">>> Save File: '{a2.save_file}'")
+            print(f">>> Load File: '{a2.load_file}'")
+        
+        # Game Parameters
         elif inp == "hdls":
             headless = not headless
             print(f">>> Headles: {headless}")
         elif inp == "phdls":
             print(f">>> Headles: {headless}")
+        elif inp.startswith("ng=") and inp[3:].isdigit():
+            ngames = int(inp[3:])
+            print(f">>> Games: {ngames}")
         elif inp == "png":
             print(f">>> Games: {ngames}")
         

@@ -26,7 +26,7 @@ class QLearnStats(Stats):
     
     def __repr__(self):
         return (super().__repr__() \
-                + f">>> Hit Rate: \t{self.q_table_hits / self.q_table_lookups}")
+                + f">>> Hit Rate: \t\t{self.q_table_hits / max(self.q_table_lookups, 1)}")
     
     def duplicate(self) -> Stats:
         return QLearnStats(self.agent_name)
